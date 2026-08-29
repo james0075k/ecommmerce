@@ -1,0 +1,162 @@
+/* ==========================================================================
+   BAZAAR DESIGN TOKENS  -  Blueprint Part H1
+   --------------------------------------------------------------------------
+   Two layers live here:
+
+     1. --bz-*        the raw brand tokens, exactly as specified in H1.
+     2. shadcn vars   --background, --primary, ... mapped onto the brand tokens
+                      so every shadcn/ui component inherits Bazaar automatically.
+
+   Dark is the default theme (A1.2: "dark mode as default with one-click light
+   toggle"), so the dark values are the ones a first-time visitor sees.
+   ========================================================================== */
+
+:root {
+  /* --- Brand ------------------------------------------------------------- */
+  --bz-primary: #6c3ce1; /* buttons, links, active states, CTAs        */
+  --bz-primary-hover: #5a30c4;
+  --bz-primary-soft: #f1ebff;
+  --bz-secondary: #ff6b35; /* sale badges, urgency, accent highlights     */
+  --bz-secondary-hover: #ef5a24;
+  --bz-success: #00c48c; /* in-stock, verified, success states         */
+  --bz-error: #ff4757; /* errors, out-of-stock, delete actions       */
+  --bz-warning: #f59e0b; /* low stock, flash sale, rating stars        */
+
+  /* --- Surfaces (light) --------------------------------------------------- */
+  --bz-bg: #fafbfc;
+  --bz-surface: #ffffff;
+  --bz-surface-2: #f2f4f7;
+  --bz-text: #1a1a2e;
+  --bz-text-muted: #5b6478;
+  --bz-border: #e2e8f0;
+
+  /* --- Radii -------------------------------------------------------------- */
+  --bz-radius-sm: 8px; /* badges, inputs        */
+  --bz-radius-md: 12px; /* cards, buttons        */
+  --bz-radius-lg: 16px; /* modals, large cards   */
+  --bz-radius-full: 9999px; /* pills, avatars        */
+
+  /* --- Elevation ---------------------------------------------------------- */
+  --bz-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --bz-shadow-lg: 0 20px 60px rgba(108, 60, 225, 0.15);
+
+  /* --- Motion (H2) -------------------------------------------------------- */
+  --bz-ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);
+  --bz-ease-drawer: cubic-bezier(0.33, 1, 0.68, 1);
+  --bz-duration-fast: 200ms;
+  --bz-duration-base: 250ms;
+  --bz-duration-page: 400ms;
+  --bz-duration-slow: 500ms;
+
+  /* --- Layout ------------------------------------------------------------- */
+  --bz-container-max: 1440px; /* H3: wide screens centre at 1440px */
+
+  /* ======================================================================
+     shadcn/ui variable mapping  -  light
+     ====================================================================== */
+  --background: var(--bz-bg);
+  --foreground: var(--bz-text);
+
+  --card: var(--bz-surface);
+  --card-foreground: var(--bz-text);
+
+  --popover: var(--bz-surface);
+  --popover-foreground: var(--bz-text);
+
+  --primary: var(--bz-primary);
+  --primary-foreground: #ffffff;
+
+  --secondary: var(--bz-surface-2);
+  --secondary-foreground: var(--bz-text);
+
+  --muted: var(--bz-surface-2);
+  --muted-foreground: var(--bz-text-muted);
+
+  --accent: var(--bz-primary-soft);
+  --accent-foreground: var(--bz-primary);
+
+  --destructive: var(--bz-error);
+  --destructive-foreground: #ffffff;
+
+  --border: var(--bz-border);
+  --input: var(--bz-border);
+  --ring: var(--bz-primary);
+
+  --radius: var(--bz-radius-md);
+
+  /* Chart series - used by the Recharts dashboards in Phase 8 */
+  --chart-1: var(--bz-primary);
+  --chart-2: var(--bz-secondary);
+  --chart-3: var(--bz-success);
+  --chart-4: var(--bz-warning);
+  --chart-5: #38bdf8;
+
+  --sidebar: var(--bz-surface);
+  --sidebar-foreground: var(--bz-text);
+  --sidebar-primary: var(--bz-primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--bz-surface-2);
+  --sidebar-accent-foreground: var(--bz-text);
+  --sidebar-border: var(--bz-border);
+  --sidebar-ring: var(--bz-primary);
+}
+
+.dark {
+  /* --- Surfaces (dark) ---------------------------------------------------- */
+  --bz-bg: #0b0e1a;
+  --bz-surface: #161b2e;
+  --bz-surface-2: #1e2439;
+  --bz-text: #e2e8f0;
+  --bz-text-muted: #8b95ad;
+  --bz-border: #262d45;
+
+  --bz-primary-soft: #221a3d;
+  --bz-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --bz-shadow-lg: 0 20px 60px rgba(108, 60, 225, 0.25);
+
+  /* ======================================================================
+     shadcn/ui variable mapping  -  dark
+     ====================================================================== */
+  --background: var(--bz-bg);
+  --foreground: var(--bz-text);
+
+  --card: var(--bz-surface);
+  --card-foreground: var(--bz-text);
+
+  --popover: var(--bz-surface);
+  --popover-foreground: var(--bz-text);
+
+  --primary: #8b5cf6; /* lifted for AA contrast on #0B0E1A */
+  --primary-foreground: #ffffff;
+
+  --secondary: var(--bz-surface-2);
+  --secondary-foreground: var(--bz-text);
+
+  --muted: var(--bz-surface-2);
+  --muted-foreground: var(--bz-text-muted);
+
+  --accent: var(--bz-primary-soft);
+  --accent-foreground: #c4b5fd;
+
+  --destructive: var(--bz-error);
+  --destructive-foreground: #ffffff;
+
+  --border: var(--bz-border);
+  --input: var(--bz-surface-2);
+  --ring: #8b5cf6;
+
+  --chart-1: #8b5cf6;
+  --chart-2: var(--bz-secondary);
+  --chart-3: var(--bz-success);
+  --chart-4: var(--bz-warning);
+  --chart-5: #38bdf8;
+
+  --sidebar: var(--bz-surface);
+  --sidebar-foreground: var(--bz-text);
+  --sidebar-primary: #8b5cf6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--bz-surface-2);
+  --sidebar-accent-foreground: var(--bz-text);
+  --sidebar-border: var(--bz-border);
+  --sidebar-ring: #8b5cf6;
+}

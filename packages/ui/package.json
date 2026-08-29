@@ -1,0 +1,33 @@
+{
+  "name": "@bazaar/ui",
+  "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./tokens.css",
+    "./animations.css": "./animations.css"
+  },
+  "scripts": {
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf .turbo"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@bazaar/config": "workspace:*",
+    "@types/react": "^19.0.7",
+    "eslint": "^9.18.0",
+    "framer-motion": "^12.0.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.3"
+  },
+  "peerDependencies": {
+    "framer-motion": ">=11",
+    "react": ">=19"
+  }
+}

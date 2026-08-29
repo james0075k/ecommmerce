@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Bazaar NestJS",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    // node16 (not node10) so packages that ship an "exports" map - meilisearch,
+    // among others - resolve. apps/api has no "type": "module", so TypeScript
+    // still emits CommonJS and relative imports need no file extension.
+    "module": "node16",
+    "moduleResolution": "node16",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "removeComments": true,
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": true,
+    "incremental": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+
+    // Nest emits decorator metadata, which isolatedModules forbids.
+    "isolatedModules": false,
+
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+
+    // Nest injects properties through decorators after construction.
+    "strictPropertyInitialization": false
+  }
+}

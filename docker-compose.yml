@@ -1,0 +1,70 @@
+# ---------------------------------------------------------------------------
+# BAZAAR - Local development infrastructure
+#   docker compose up -d      start Postgres + Redis + Meilisearch
+#   docker compose ps         check health
+#   docker compose down       stop (volumes are preserved)
+#   docker compose down -v    stop and DELETE all data
+# ---------------------------------------------------------------------------
+name: bazaar
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: bazaar_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bazaar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bazaar_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-bazaar}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - '5432:5432'
+    volumes:
+      - bazaar_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-bazaar} -d ${POSTGRES_DB:-bazaar}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:8-alpine
+    container_name: bazaar_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - '6379:6379'
+    volumes:
+      - bazaar_redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.13
+    container_name: bazaar_meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-bazaar_dev_master_key_change_me_min_16_chars}
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: 'true'
+    ports:
+      - '7700:7700'
+    volumes:
+      - bazaar_meilidata:/meili_data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:7700/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  bazaar_pgdata:
+    name: bazaar_pgdata
+  bazaar_redisdata:
+    name: bazaar_redisdata
+  bazaar_meilidata:
+    name: bazaar_meilidata
