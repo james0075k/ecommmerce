@@ -1,6 +1,7 @@
 # Bazaar
 
 **A next-generation ecommerce platform for Nepal and the world.**
+
 Bazaar is a full-stack storefront and admin platform built around three things most
 platforms in this market get wrong: native Nepali payment rails (eSewa, Khalti, ConnectIPS,
 Fonepay, IME Pay), district- and province-aware shipping across all 77 districts, and a
@@ -634,6 +635,3 @@ database and queue workers. Past 100K, multi-region with dedicated queue workers
 ## License
 
 UNLICENSED — private project.
-#   e c o m m m e r c e 
- 
- 
