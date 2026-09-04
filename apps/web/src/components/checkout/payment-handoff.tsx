@@ -135,7 +135,7 @@ function StripeHandoff({
         clientSecret: payment.clientSecret,
         appearance: {
           theme: resolvedTheme === 'dark' ? 'night' : 'stripe',
-          variables: { colorPrimary: '#6C3CE1', borderRadius: '10px' },
+          variables: { colorPrimary: '#3B372F', borderRadius: '4px' },
         },
       }}
     >

@@ -4,6 +4,7 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule, type JwtModuleOptions } from '@nestjs/jwt';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { SentryModule } from '@sentry/nestjs/setup';
 import { RATE_LIMIT_DEFAULT } from '@bazaar/shared';
 
 import { AdminModule } from './admin/admin.module';
@@ -22,6 +23,8 @@ import { RequestContextModule } from './common/request-context.module';
 import { validateEnv } from './config/env';
 import { HealthModule } from './health/health.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { MetricsInterceptor } from './observability/metrics.interceptor';
+import { ObservabilityModule } from './observability/observability.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -36,6 +39,12 @@ import { WishlistModule } from './wishlist/wishlist.module';
 
 @Module({
   imports: [
+    // Must be first: it wires Sentry into the Nest lifecycle so a handler that
+    // throws is attributed to its controller and route rather than to Express.
+    // The SDK itself is initialised before the container exists - see
+    // observability/instrument.ts, imported at the top of main.ts.
+    SentryModule.forRoot(),
+
     ConfigModule.forRoot({
       isGlobal: true,
       // The workspace root .env is the single source of truth; apps/api/.env
@@ -69,6 +78,7 @@ import { WishlistModule } from './wishlist/wishlist.module';
     ScheduleModule.forRoot(),
 
     RequestContextModule,
+    ObservabilityModule,
     PrismaModule,
     RedisModule,
     QueueModule,
@@ -92,11 +102,15 @@ import { WishlistModule } from './wishlist/wishlist.module';
     HealthModule,
   ],
   providers: [
-    // Interceptors run in declaration order on the way in. The context has to
-    // be open before the audit interceptor logs anything through it, so it is
-    // registered first - and both sit outside any feature module, so a new
-    // admin route is covered the day it is written rather than the day someone
-    // remembers to decorate it (Phase 8).
+    // Interceptors run in declaration order on the way in, so the first one
+    // registered is the outermost. Metrics goes first because the latency it
+    // records should cover everything below it - timing only the handler would
+    // hide the cost of the audit log (Phase 12.8). The request context then has
+    // to be open before the audit interceptor logs anything through it, and
+    // both sit outside any feature module, so a new admin route is covered the
+    // day it is written rather than the day someone remembers to decorate it
+    // (Phase 8).
+    { provide: APP_INTERCEPTOR, useClass: MetricsInterceptor },
     { provide: APP_INTERCEPTOR, useClass: RequestContextInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AdminAuditInterceptor },
 

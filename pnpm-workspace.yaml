@@ -8,10 +8,14 @@ packages:
 #   argon2          - native build for Argon2id password hashing (D1)
 #   msgpackr-extract- optional native accelerator for BullMQ payloads
 #   sharp           - ships prebuilt binaries; no build step needed
+#   @sentry/cli     - downloads the binary that uploads source maps at build time
+#   core-js         - only prints a funding notice; nothing to build
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
+  '@sentry/cli': true
   argon2: true
+  core-js: false
   esbuild: true
   msgpackr-extract: true
   prisma: true

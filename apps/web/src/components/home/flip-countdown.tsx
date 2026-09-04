@@ -88,7 +88,7 @@ function FlipGroup({ value, unit }: { value: number; unit: string }) {
         <FlipDigit digit={tens} />
         <FlipDigit digit={ones} />
       </div>
-      <span className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+      <span className="bz-label text-muted-foreground">
         {unit}
       </span>
     </div>

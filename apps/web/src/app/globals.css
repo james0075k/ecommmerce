@@ -63,10 +63,24 @@
   --color-danger: var(--bz-error-text);
   --color-deal: var(--bz-sale-text);
 
-  /* --- Type (Part H1) ---------------------------------------------------- */
-  --font-display: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, 'Cascadia Mono', monospace;
+  /* Type used as a field of colour rather than as something to be read - the
+     oversized footer wordmark, and nothing else so far. */
+  --color-wordmark: var(--bz-wordmark);
+
+  /* --- Type ---------------------------------------------------------------
+     One family across the whole product. The brand has no serif/sans pairing
+     to announce; the voice comes from weight, case and tracking instead, and a
+     single grotesque used at 13px uppercase and at 180px lowercase reads as
+     one system rather than two.
+
+     Mono is no longer part of the brand voice - prices and SKUs get their
+     columns from `tabular-nums` in the same grotesque, not from a typewriter
+     face. It survives only for the two things that genuinely are code: a `kbd`
+     and a copyable snippet in admin settings. Those use the system stack, so
+     the app downloads exactly one font file. */
+  --font-display: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', 'Roboto Mono', monospace;
 
   /* --- Radii (Part H1) --------------------------------------------------- */
   --radius-sm: var(--bz-radius-sm);
@@ -105,16 +119,32 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* Headings are set in the medium weight, not the heavy one. At display sizes
+     a grotesque carries emphasis through scale and tight fitting; adding 800
+     on top of 72px only makes it shout. The negative tracking is what stops a
+     large lowercase line from falling apart into separate words. */
   h1,
   h2,
   h3,
   h4 {
-    @apply font-display tracking-tight;
+    @apply font-display font-medium;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
   }
 
-  /* Prices, SKUs and tracking numbers are tabular data - mono, aligned. */
+  /* Past roughly 48px the optical tracking needs to close up further, or the
+     word spaces open into gaps. */
+  .bz-display {
+    letter-spacing: -0.035em;
+    line-height: 0.92;
+  }
+
+  /* Prices, SKUs and tracking numbers are tabular data. They need their digits
+     to line up in a column, which is what `tabular-nums` does - the family
+     stays the same as the rest of the page. */
   .numeric {
-    @apply font-mono tabular-nums;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
   }
 
   /* Accessibility floor: a visible focus ring on every interactive element. */
@@ -123,7 +153,57 @@
   }
 
   ::selection {
-    background-color: color-mix(in srgb, var(--bz-primary) 30%, transparent);
+    background-color: color-mix(in srgb, var(--bz-primary) 22%, transparent);
+  }
+}
+
+@layer components {
+  /* --- Navigation and label type -----------------------------------------
+     The uppercase, wide-tracked label is the brand's second voice: it is on
+     every nav item, every button, every footer column heading and every
+     eyebrow. Defining it once means the tracking is the same in all of them,
+     which is the whole point - inconsistent tracking is what makes uppercase
+     type look amateur. */
+  .bz-label {
+    @apply font-display text-[0.6875rem] font-semibold uppercase;
+    letter-spacing: 0.11em;
+  }
+
+  .bz-label-lg {
+    @apply font-display text-[0.8125rem] font-semibold uppercase;
+    letter-spacing: 0.09em;
+  }
+
+  /* --- Wordmark crop -------------------------------------------------------
+     The oversized footer logotype, cut off by the bottom of its panel. Both
+     values are em-relative so the same fraction of the letterforms is trimmed
+     at every viewport width, and both live here rather than as `pt-[0.08em]`
+     and `-mb-[0.19em]` utilities because Tailwind does not emit em-valued
+     arbitrary spacing - the classes were silently dropped and the wordmark
+     rendered uncropped. */
+  .bz-wordmark-crop {
+    padding-top: 0.08em;
+    margin-bottom: -0.19em;
+  }
+
+  /* --- Link underline ------------------------------------------------------
+     The rule grows from the left rather than fading in, so the link reads as
+     being drawn under rather than as a colour change. Used on nav items and
+     footer links; `currentColor` keeps it correct over the hero, where the
+     text is white, and on the page, where it is ink. */
+  .bz-underline {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    background-size: 0% 1px;
+    transition: background-size var(--bz-duration-base) var(--bz-ease-out-expo);
+  }
+
+  .bz-underline:hover,
+  .bz-underline:focus-visible,
+  [aria-current='page'] > .bz-underline,
+  .bz-underline[aria-current='page'] {
+    background-size: 100% 1px;
   }
 }
 
@@ -132,6 +212,36 @@
   .container-bazaar {
     @apply mx-auto w-full px-4 md:px-6 lg:px-8;
     max-width: var(--bz-container-max);
+  }
+
+  /* --- The inset panel -----------------------------------------------------
+     The layout signature. A full-bleed section is held off the viewport edge
+     by a consistent margin and rounded, so the page ground frames it like a
+     mat around a print. Everything that would otherwise run edge to edge - the
+     hero, the campaign blocks, the footer wordmark band - uses this. */
+  .bz-panel {
+    margin-inline: var(--bz-inset);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  /* Photography settles into place rather than appearing. Paired with a
+     `group` on the container, an image drifts up 4% on hover over most of a
+     second - the only hover effect in the system that moves anything. */
+  .bz-image-settle {
+    transition:
+      transform var(--bz-duration-slow) var(--bz-ease-out-expo),
+      opacity var(--bz-duration-slow) var(--bz-ease-out-expo);
+  }
+
+  .group:hover .bz-image-settle {
+    transform: scale(1.04);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .group:hover .bz-image-settle {
+      transform: none;
+    }
   }
 
   /* Below-the-fold sections opt out of layout and paint until they are near the
@@ -169,6 +279,17 @@
    sentence 44px tall would wreck the line box, and WCAG exempts them.
    ========================================================================== */
 @media (pointer: coarse) {
+  /* The navbar is built from words and bare icons rather than from buttons, so
+     it does not inherit the floor below. On a phone those controls are icons
+     around 20px inside a 32px box, which is a mis-tap waiting to happen. */
+  [data-slot='nav-control'] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
   [data-slot='button'],
   [data-slot='dropdown-menu-item'],
   [data-slot='select-item'],

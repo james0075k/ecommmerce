@@ -1,70 +1,98 @@
 /* ==========================================================================
-   BAZAAR DESIGN TOKENS  -  Blueprint Part H1
+   BAZAAR DESIGN TOKENS
    --------------------------------------------------------------------------
    Two layers live here:
 
-     1. --bz-*        the raw brand tokens, exactly as specified in H1.
+     1. --bz-*        the raw brand tokens.
      2. shadcn vars   --background, --primary, ... mapped onto the brand tokens
                       so every shadcn/ui component inherits Bazaar automatically.
 
-   Dark is the default theme (A1.2: "dark mode as default with one-click light
-   toggle"), so the dark values are the ones a first-time visitor sees.
+   The palette is monochrome by design. There is no accent hue: emphasis is
+   carried by weight, scale and whitespace, and the only saturated colours in
+   the system are the four commerce statuses below, which exist to mean
+   something rather than to decorate.
+
+   Light is the canonical theme - the warm oatmeal ground is the brand. Dark is
+   a counterpart rather than an inversion: the greys keep their warmth, so it
+   reads as the same brand with the lights off.
    ========================================================================== */
 
 :root {
-  /* --- Brand ------------------------------------------------------------- */
-  --bz-primary: #6c3ce1; /* buttons, links, active states, CTAs        */
-  --bz-primary-hover: #5a30c4;
-  --bz-primary-soft: #f1ebff;
-  --bz-secondary: #ff6b35; /* sale badges, urgency, accent highlights     */
-  --bz-secondary-hover: #ef5a24;
-  --bz-success: #00c48c; /* in-stock, verified, success states         */
-  --bz-error: #ff4757; /* errors, out-of-stock, delete actions       */
-  --bz-warning: #f59e0b; /* low stock, flash sale, rating stars        */
+  /* --- Brand -------------------------------------------------------------
+     "Primary" is the ink itself. A button is dark-on-oatmeal or an outline;
+     nothing on the page tries to be brighter than the product photography.
+     These flip in dark mode, where the ink becomes the light value. */
+  --bz-primary: #3b372f; /* buttons, links, active states, CTAs        */
+  --bz-primary-hover: #2a2721;
+  --bz-primary-soft: #e4e0d7; /* hover wash, quiet fills                    */
 
-  /* --- Status colours as *text* (Phase 11, WCAG AA) ------------------------
-     The four status hues above are chosen to be legible as fills with black or
-     white on top of them. As text on a near-white page they are nowhere near
-     AA: #00C48C is 2.26:1 on white, #F59E0B is 2.15:1, #FF6B35 is 2.84:1 and
-     #FF4757 is 3.34:1 - all of them well under the 4.5:1 floor.
+  /* --- Commerce status ---------------------------------------------------
+     Earthy rather than fluorescent, so a sale badge sits inside the palette
+     instead of shouting across it - but still four unmistakably different
+     hues, because these carry meaning and must not read as decoration.
+     These values are the *fills*; their text partners are below. */
+  --bz-secondary: #a8442f; /* sale badges, urgency, discounts            */
+  --bz-secondary-hover: #93392a;
+  --bz-success: #4e7a41; /* in-stock, verified, success states         */
+  --bz-error: #bc4238; /* errors, out-of-stock, delete actions       */
+  --bz-warning: #9a7420; /* low stock, flash sale, rating stars        */
 
-     So each one gets a darkened partner used only for text and icons. The fills
-     keep the brand hue; the words on the page keep their contrast. In dark mode
-     the originals are already 7:1 or better against the surfaces, so the text
-     tokens there stay bright and only ease off the saturation. */
-  --bz-success-text: #047857; /* 5.48:1 on white  */
-  --bz-warning-text: #b45309; /* 5.02:1 on white  */
-  --bz-error-text: #dc2626; /* 4.83:1 on white  */
-  --bz-sale-text: #c2410c; /* 5.18:1 on white  */
+  /* --- Status colours as *text* (WCAG AA) --------------------------------
+     A fill carries white text and only has to be dark enough for that. The
+     same hues as words on the oatmeal ground have to clear 4.5:1 against
+     #EFECE6, which the fills do not, so each one gets a darkened partner used
+     only for text and icons. Ratios measured against --bz-bg. */
+  --bz-success-text: #3f6135; /* 5.99:1 */
+  --bz-warning-text: #7a5a14; /* 5.40:1 */
+  --bz-error-text: #a03a30; /* 5.67:1 */
+  --bz-sale-text: #8c3a2b; /* 6.46:1 */
 
-  /* --- Surfaces (light) --------------------------------------------------- */
-  --bz-bg: #fafbfc;
-  --bz-surface: #ffffff;
-  --bz-surface-2: #f2f4f7;
-  --bz-text: #1a1a2e;
-  --bz-text-muted: #5b6478;
-  --bz-border: #e2e8f0;
+  /* --- Surfaces (light) ---------------------------------------------------
+     Warm neutrals throughout. --bz-bg is the brand ground, --bz-surface the
+     half-step lighter panel a card sits on, and --bz-surface-2 the half-step
+     darker one an input well sits in. */
+  --bz-bg: #efece6;
+  --bz-surface: #f5f3ef;
+  --bz-surface-2: #e4e0d7;
+  --bz-text: #3b372f; /* 8.06:1 on --bz-bg */
+  --bz-text-muted: #67625a; /* 5.13:1 on --bz-bg */
+  --bz-border: #dcd7ce;
 
-  /* --- Radii -------------------------------------------------------------- */
-  --bz-radius-sm: 8px; /* badges, inputs        */
-  --bz-radius-md: 12px; /* cards, buttons        */
-  --bz-radius-lg: 16px; /* modals, large cards   */
-  --bz-radius-full: 9999px; /* pills, avatars        */
+  /* The oversized wordmark in the footer, and any other type used as a field
+     of colour rather than as something to be read. Deliberately low contrast:
+     it is a texture, and the copy beside it carries the message. */
+  --bz-wordmark: #6e6960;
 
-  /* --- Elevation ---------------------------------------------------------- */
-  --bz-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --bz-shadow-lg: 0 20px 60px rgba(108, 60, 225, 0.15);
+  /* --- Radii -------------------------------------------------------------
+     Square-ish containers, fully round controls. A button is a pill, a card is
+     barely rounded and an input is nearly square - the contrast between the
+     three is what keeps a form from reading as a pile of identical boxes. */
+  --bz-radius-sm: 4px; /* inputs, badges        */
+  --bz-radius-md: 8px; /* cards                 */
+  --bz-radius-lg: 24px; /* hero panels, modals   */
+  --bz-radius-full: 9999px; /* buttons, pills        */
 
-  /* --- Motion (H2) -------------------------------------------------------- */
+  /* --- Elevation ---------------------------------------------------------
+     Almost nothing. Separation comes from the hairline and the surface step,
+     not from a drop shadow under every card. */
+  --bz-shadow-sm: 0 1px 2px rgba(59, 55, 47, 0.05);
+  --bz-shadow-lg: 0 24px 60px rgba(59, 55, 47, 0.1);
+
+  /* --- Motion -------------------------------------------------------------
+     Slow and quiet. Nothing springs and nothing bounces: transitions are long
+     ease-outs that settle, and an image reveal takes most of a second. */
   --bz-ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);
   --bz-ease-drawer: cubic-bezier(0.33, 1, 0.68, 1);
-  --bz-duration-fast: 200ms;
-  --bz-duration-base: 250ms;
-  --bz-duration-page: 400ms;
-  --bz-duration-slow: 500ms;
+  --bz-duration-fast: 260ms;
+  --bz-duration-base: 400ms;
+  --bz-duration-page: 600ms;
+  --bz-duration-slow: 900ms;
 
   /* --- Layout ------------------------------------------------------------- */
-  --bz-container-max: 1440px; /* H3: wide screens centre at 1440px */
+  --bz-container-max: 1440px;
+  /* The signature inset: full-bleed sections sit as panels held off the
+     viewport edge rather than running into it. */
+  --bz-inset: 0.75rem;
 
   /* ======================================================================
      shadcn/ui variable mapping  -  light
@@ -79,9 +107,9 @@
   --popover-foreground: var(--bz-text);
 
   --primary: var(--bz-primary);
-  --primary-foreground: #ffffff;
-  /* The fill behind white text. Identical to --primary in light mode; the two
-     part company in dark, where one value cannot serve both jobs. */
+  --primary-foreground: #f5f3ef;
+  /* The fill behind inverted text. Identical to --primary in light mode; the
+     two part company in dark, where the ink and the ground swap places. */
   --primary-solid: var(--bz-primary);
 
   --secondary: var(--bz-surface-2);
@@ -91,10 +119,10 @@
   --muted-foreground: var(--bz-text-muted);
 
   --accent: var(--bz-primary-soft);
-  --accent-foreground: var(--bz-primary);
+  --accent-foreground: var(--bz-text);
 
   --destructive: var(--bz-error);
-  --destructive-foreground: #ffffff;
+  --destructive-foreground: #f5f3ef;
 
   --border: var(--bz-border);
   --input: var(--bz-border);
@@ -102,17 +130,19 @@
 
   --radius: var(--bz-radius-md);
 
-  /* Chart series - used by the Recharts dashboards in Phase 8 */
-  --chart-1: var(--bz-primary);
-  --chart-2: var(--bz-secondary);
-  --chart-3: var(--bz-success);
-  --chart-4: var(--bz-warning);
-  --chart-5: #38bdf8;
+  /* Chart series - used by the Recharts dashboards. A monochrome brand cannot
+     tell five series apart, so the charts borrow the earthy status family,
+     which separates by hue and by lightness both. */
+  --chart-1: #3b372f;
+  --chart-2: #8c3a2b;
+  --chart-3: #4e7a41;
+  --chart-4: #9a7420;
+  --chart-5: #5a6e7a;
 
   --sidebar: var(--bz-surface);
   --sidebar-foreground: var(--bz-text);
   --sidebar-primary: var(--bz-primary);
-  --sidebar-primary-foreground: #ffffff;
+  --sidebar-primary-foreground: #f5f3ef;
   --sidebar-accent: var(--bz-surface-2);
   --sidebar-accent-foreground: var(--bz-text);
   --sidebar-border: var(--bz-border);
@@ -120,24 +150,40 @@
 }
 
 .dark {
-  /* --- Surfaces (dark) ---------------------------------------------------- */
-  --bz-bg: #0b0e1a;
-  --bz-surface: #161b2e;
-  --bz-surface-2: #1e2439;
-  --bz-text: #e2e8f0;
-  --bz-text-muted: #8b95ad;
-  --bz-border: #262d45;
+  /* --- Surfaces (dark) ----------------------------------------------------
+     Warm charcoal, not blue-black. The hue of the light theme is preserved and
+     only the lightness inverts, which is what stops the dark theme reading as
+     a different product. */
+  --bz-bg: #141210;
+  --bz-surface: #1e1b17;
+  --bz-surface-2: #28241e;
+  --bz-text: #e8e3d9; /* 14.6:1 on --bz-bg */
+  --bz-text-muted: #a39c90; /* 6.87:1 on --bz-bg */
+  --bz-border: #332e27;
 
-  --bz-primary-soft: #221a3d;
+  --bz-wordmark: #3a352d;
 
-  /* Against #161B2E these read at 8.9:1, 10.2:1, 7.6:1 and 7.5:1. */
-  --bz-success-text: #34d399;
-  --bz-warning-text: #fbbf24;
-  --bz-error-text: #ff8a94;
-  --bz-sale-text: #fb923c;
+  /* The ink and the ground trade places. */
+  --bz-primary: #e8e3d9;
+  --bz-primary-hover: #ffffff;
+  --bz-primary-soft: #28241e;
 
-  --bz-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --bz-shadow-lg: 0 20px 60px rgba(108, 60, 225, 0.25);
+  /* Lifted out of the earth range far enough to hold light text on the dark
+     surfaces without going neon. */
+  --bz-secondary: #c25438;
+  --bz-secondary-hover: #d26042;
+  --bz-success: #5f9450;
+  --bz-error: #d15448;
+  --bz-warning: #b98d28;
+
+  /* Against #1E1B17 these read between 7:1 and 9:1. */
+  --bz-success-text: #92c47f;
+  --bz-warning-text: #dfb457;
+  --bz-error-text: #f0918a;
+  --bz-sale-text: #eb9670;
+
+  --bz-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --bz-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
 
   /* ======================================================================
      shadcn/ui variable mapping  -  dark
@@ -151,13 +197,11 @@
   --popover: var(--bz-surface);
   --popover-foreground: var(--bz-text);
 
-  --primary: #8b5cf6; /* lifted for AA contrast on #0B0E1A */
-  --primary-foreground: #ffffff;
-  /* Darker than --primary on purpose. #8B5CF6 is light enough to read as text
-     on the near-black background (4.5:1) but too light to carry white text on
-     top of it (4.2:1) - no single purple does both, so buttons and badges use
-     this one and text keeps --primary. */
-  --primary-solid: #7c3aed;
+  --primary: var(--bz-primary);
+  /* Inverted: a solid button in dark mode is a pale fill carrying dark text,
+     the mirror of the dark-on-oatmeal button in light mode. */
+  --primary-foreground: #141210;
+  --primary-solid: var(--bz-primary);
 
   --secondary: var(--bz-surface-2);
   --secondary-foreground: var(--bz-text);
@@ -166,27 +210,27 @@
   --muted-foreground: var(--bz-text-muted);
 
   --accent: var(--bz-primary-soft);
-  --accent-foreground: #c4b5fd;
+  --accent-foreground: var(--bz-text);
 
   --destructive: var(--bz-error);
-  --destructive-foreground: #ffffff;
+  --destructive-foreground: #141210;
 
   --border: var(--bz-border);
   --input: var(--bz-surface-2);
-  --ring: #8b5cf6;
+  --ring: var(--bz-primary);
 
-  --chart-1: #8b5cf6;
-  --chart-2: var(--bz-secondary);
-  --chart-3: var(--bz-success);
-  --chart-4: var(--bz-warning);
-  --chart-5: #38bdf8;
+  --chart-1: #e8e3d9;
+  --chart-2: #eb9670;
+  --chart-3: #92c47f;
+  --chart-4: #dfb457;
+  --chart-5: #8fa8b5;
 
   --sidebar: var(--bz-surface);
   --sidebar-foreground: var(--bz-text);
-  --sidebar-primary: #8b5cf6;
-  --sidebar-primary-foreground: #ffffff;
+  --sidebar-primary: var(--bz-primary);
+  --sidebar-primary-foreground: #141210;
   --sidebar-accent: var(--bz-surface-2);
   --sidebar-accent-foreground: var(--bz-text);
   --sidebar-border: var(--bz-border);
-  --sidebar-ring: #8b5cf6;
+  --sidebar-ring: var(--bz-primary);
 }

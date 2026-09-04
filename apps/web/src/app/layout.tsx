@@ -1,29 +1,25 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, JetBrains_Mono, Plus_Jakarta_Sans } from 'next/font/google';
+import { Instrument_Sans } from 'next/font/google';
 
 import { Providers } from '@/components/providers/providers';
 
 import './globals.css';
 
-/* Part H1 type stack. `display: swap` keeps CLS under the J1 budget of 0.05. */
-const inter = Inter({
+/**
+ * One family for the whole product.
+ *
+ * Instrument Sans is a grotesque with geometric bowls and slightly squared
+ * terminals - neutral enough to disappear at 15px body copy, and characterful
+ * enough to carry the wordmark at 180px without a second display face. Loading
+ * one variable file instead of three static families also takes roughly 120KB
+ * off the critical path, which is the same argument in a different currency.
+ *
+ * `display: swap` keeps CLS under the J1 budget of 0.05.
+ */
+const instrumentSans = Instrument_Sans({
   subsets: ['latin'],
-  variable: '--font-inter',
+  variable: '--font-instrument',
   display: 'swap',
-});
-
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  variable: '--font-plus-jakarta',
-  display: 'swap',
-  weight: ['500', '600', '700', '800'],
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-jetbrains-mono',
-  display: 'swap',
-  weight: ['400', '500', '600'],
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
@@ -73,8 +69,8 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
   // Matches --bz-bg in both themes so the mobile browser chrome blends in.
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#FAFBFC' },
-    { media: '(prefers-color-scheme: dark)', color: '#0B0E1A' },
+    { media: '(prefers-color-scheme: light)', color: '#EFECE6' },
+    { media: '(prefers-color-scheme: dark)', color: '#141210' },
   ],
 };
 
@@ -85,9 +81,7 @@ export default function RootLayout({
     // suppressHydrationWarning is required: next-themes writes the theme class
     // on <html> before React hydrates.
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${inter.variable} ${plusJakarta.variable} ${jetbrainsMono.variable}`}
-      >
+      <body className={instrumentSans.variable}>
         {/* The first thing in the tab order, and invisible until it has focus.
             Without it a keyboard user re-traverses the navbar, the mega menu
             and the search field on every single page before reaching the

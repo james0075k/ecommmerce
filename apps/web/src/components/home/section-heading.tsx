@@ -1,25 +1,27 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
 
 import { FadeInOnScroll } from '@/components/animations/fade-in-on-scroll';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 /**
  * One heading shape for every homepage section, so the page reads as a single
  * document rather than eight separately designed blocks.
+ *
+ * Deliberately no eyebrow. A tracked-out uppercase word sitting above every
+ * heading is a label for the heading, and a heading that needs labelling is
+ * not doing its job - "Trending" over "What everyone is buying this week" says
+ * the same thing twice, in two type styles, and costs a line of vertical space
+ * on every section of the page.
  */
 export function SectionHeading({
-  eyebrow,
   title,
   description,
   action,
   align = 'start',
   className,
 }: {
-  eyebrow: string;
   title: string;
   description?: string;
   action?: { label: string; href: string };
@@ -34,13 +36,8 @@ export function SectionHeading({
         className,
       )}
     >
-      <div className={cn('space-y-2', align === 'center' && 'max-w-2xl')}>
-        <span className="font-mono text-xs tracking-widest text-primary uppercase">
-          {eyebrow}
-        </span>
-        <h2 className="font-display text-2xl font-bold tracking-tight text-balance md:text-3xl lg:text-4xl">
-          {title}
-        </h2>
+      <div className={cn('space-y-3', align === 'center' && 'max-w-2xl')}>
+        <h2 className="text-[1.75rem] md:text-4xl lg:text-[2.75rem]">{title}</h2>
         {description ? (
           <p className="max-w-prose text-sm text-muted-foreground text-pretty md:text-base">
             {description}
@@ -48,13 +45,16 @@ export function SectionHeading({
         ) : null}
       </div>
 
+      {/* A link, not a button. The section already has a heading with weight
+          behind it; a second filled control beside it would compete with the
+          products underneath, which are the actual call to action. */}
       {action ? (
-        <Button asChild variant="ghost" size="sm" className="group/link self-start md:self-auto">
-          <Link href={action.href}>
-            {action.label}
-            <ArrowRight className="size-4 transition-transform duration-200 group-hover/link:translate-x-0.5" />
-          </Link>
-        </Button>
+        <Link
+          href={action.href}
+          className="bz-label bz-underline self-start whitespace-nowrap text-muted-foreground transition-colors duration-[260ms] hover:text-foreground md:self-auto"
+        >
+          {action.label}
+        </Link>
       ) : null}
     </FadeInOnScroll>
   );

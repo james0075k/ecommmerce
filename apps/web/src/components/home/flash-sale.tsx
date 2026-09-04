@@ -78,11 +78,11 @@ export function FlashSale() {
       <div className="container-bazaar">
         <FadeInOnScroll className="mb-8 flex flex-col gap-6 md:mb-10 md:flex-row md:items-end md:justify-between">
           <div className="space-y-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-sale/15 px-3 py-1 font-mono text-xs tracking-widest text-deal uppercase">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-sale/15 px-3 py-1 bz-label text-deal">
               <Flame className="size-3.5" />
               Flash sale
             </span>
-            <h2 className="font-display text-2xl font-bold tracking-tight text-balance md:text-3xl lg:text-4xl">
+            <h2 className="text-[1.75rem] md:text-4xl lg:text-[2.75rem]">
               {best > 0 ? `Up to ${best}% off, until midnight` : 'Today only, until midnight'}
             </h2>
             <p className="max-w-prose text-sm text-muted-foreground text-pretty md:text-base">

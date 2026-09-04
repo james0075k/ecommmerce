@@ -65,7 +65,7 @@ export function StoreStats() {
                 <Icon className="size-4.5" />
               </span>
               <div className="min-w-0">
-                <p className="font-display text-xl font-bold tracking-tight md:text-2xl">
+                <p className="font-display text-xl font-medium tracking-[-0.02em] md:text-2xl">
                   {pending ? (
                     <span className="numeric text-muted-foreground">—</span>
                   ) : (

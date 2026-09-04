@@ -75,7 +75,7 @@ export function OfflineView() {
             {online ? <Wifi className="size-7" /> : <CloudOff className="size-7" />}
           </span>
 
-          <h1 className="font-display text-3xl font-extrabold tracking-tight text-balance md:text-4xl">
+          <h1 className="font-display text-3xl font-medium tracking-tight text-balance md:text-4xl">
             {online ? 'You are back online' : 'You are offline'}
           </h1>
 
@@ -98,7 +98,7 @@ export function OfflineView() {
 
         {products === null ? null : products.length > 0 ? (
           <section className="space-y-4">
-            <h2 className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
+            <h2 className="bz-label text-muted-foreground">
               Saved on this device
             </h2>
 

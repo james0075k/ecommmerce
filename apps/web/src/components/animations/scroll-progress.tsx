@@ -24,7 +24,10 @@ export function ScrollProgress() {
     <motion.div
       aria-hidden
       style={{ scaleX }}
-      className="fixed inset-x-0 top-0 z-100 h-0.5 origin-left bg-gradient-to-r from-primary via-sale to-primary"
+      // A hairline of ink, not a gradient. The palette has no accent to run
+      // across the top of the page, and a two-colour bar would be the loudest
+      // thing on a monochrome layout.
+      className="fixed inset-x-0 top-0 z-100 h-px origin-left bg-foreground"
     />
   );
 }

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client } from '@aws-sdk/client-s3';
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { randomUUID } from 'node:crypto';
 import { ALLOWED_IMAGE_MIME_TYPES, MAX_IMAGE_UPLOAD_BYTES } from '@bazaar/shared';
@@ -73,6 +73,79 @@ export class UploadService {
     return this.createUpload('products/drafts', contentType);
   }
 
+  /**
+   * Writes an object we generated ourselves - a compressed derivative of an
+   * uploaded image (Phase 12.6). Unlike the presigned path, the bytes go
+   * through the API, which is correct here: the browser never had them.
+   *
+   * `immutable` is safe because the key contains a uuid. A changed image is a
+   * new key, so a year in the CloudFront and browser cache can never be stale
+   * and a repeat visit costs nothing.
+   */
+  async putObject(key: string, body: Buffer, contentType: string): Promise<string> {
+    if (!this.client || !this.bucket) {
+      throw new ServiceUnavailableException('Object storage is not configured.');
+    }
+
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+        CacheControl: 'public, max-age=31536000, immutable',
+      }),
+    );
+
+    return this.publicUrlFor(key);
+  }
+
+  /** Where an object with this key is readable from - the CDN when there is one. */
+  publicUrlFor(key: string): string {
+    return this.cdnUrl
+      ? `${this.cdnUrl.replace(/\/$/, '')}/${key}`
+      : `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
+  }
+
+  /**
+   * The S3 key behind one of our own public URLs, or null when the URL points
+   * somewhere else entirely.
+   *
+   * The null case is the important one: the seed catalogue points at picsum,
+   * and an admin can paste any URL into the image field. Deriving a key from a
+   * host we do not own and then writing to it would put a derivative of someone
+   * else's image in our bucket under a path that means nothing.
+   */
+  keyFromUrl(url: string): string | null {
+    if (!this.bucket) return null;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return null;
+    }
+
+    const key = parsed.pathname.replace(/^\//, '');
+    if (!key) return null;
+
+    if (this.cdnUrl) {
+      try {
+        if (parsed.host === new URL(this.cdnUrl).host) return key;
+      } catch {
+        // A malformed CDN_URL is a configuration error, not a reason to throw
+        // here - fall through to the bucket host check.
+      }
+    }
+
+    const bucketHosts = [
+      `${this.bucket}.s3.${this.region}.amazonaws.com`,
+      `${this.bucket}.s3.amazonaws.com`,
+    ];
+
+    return bucketHosts.includes(parsed.host) ? key : null;
+  }
+
   private async createUpload(prefix: string, contentType: string): Promise<PresignedUpload> {
     if (!this.client || !this.bucket) {
       throw new ServiceUnavailableException(
@@ -108,9 +181,7 @@ export class UploadService {
     return {
       url,
       fields,
-      publicUrl: this.cdnUrl
-        ? `${this.cdnUrl.replace(/\/$/, '')}/${key}`
-        : `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`,
+      publicUrl: this.publicUrlFor(key),
       key,
       expiresInSeconds: PRESIGN_TTL_SECONDS,
     };

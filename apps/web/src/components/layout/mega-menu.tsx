@@ -61,13 +61,21 @@ export function MegaMenu({ overlay = false }: { overlay?: boolean }) {
         aria-haspopup="true"
         onClick={() => setOpen((current) => !current)}
         className={cn(
-          'inline-flex h-8 cursor-pointer items-center gap-1 rounded-lg px-2.5 text-sm font-medium transition-colors',
-          overlay ? 'hover:bg-white/15' : 'hover:bg-muted',
+          'bz-label inline-flex cursor-pointer items-center gap-1.5 py-2 transition-colors duration-[260ms]',
+          overlay
+            ? 'text-white/85 hover:text-white'
+            : 'text-muted-foreground hover:text-foreground',
+          open && (overlay ? 'text-white' : 'text-foreground'),
         )}
       >
-        Categories
+        {/* The underline sits on the word rather than the whole control, so
+            the chevron is not underlined along with it. */}
+        <span className={cn('bz-underline', open && 'bg-[length:100%_1px]')}>Shop</span>
         <ChevronDown
-          className={cn('size-3.5 transition-transform duration-200', open && 'rotate-180')}
+          className={cn(
+            'size-3 transition-transform duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)]',
+            open && 'rotate-180',
+          )}
           aria-hidden
         />
       </button>

@@ -3,13 +3,7 @@
 import * as React from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import {
-  motion,
-  useMotionTemplate,
-  useMotionValue,
-  useReducedMotion,
-  useSpring,
-} from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Check, Eye, Heart, Loader2, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -29,17 +23,18 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { selectIsSaved, useWishlistStore } from '@/lib/store/wishlist-store';
 import { cn } from '@/lib/utils';
 
-/** Degrees of tilt at the very corner of the card. Past ~8 it reads as a toy. */
-const MAX_TILT = 6;
-
 /**
- * The grid tile. H2 specifies hover scale to 1.03 with the image zooming to
- * 1.08, and the add-to-cart button morphing to a checkmark for ~800ms.
+ * The grid tile.
  *
- * Phase 9 adds the tilt: the card leans towards the cursor in 3D, and a
- * quick-add strip rises over the image. Both are pointer-driven, so both are
- * gated on a fine pointer - a tilt that fires on a tap is just a card that
- * jumps when you touch it.
+ * Nothing about the card moves on hover. The photograph inside it drifts up 4%
+ * over most of a second and the border darkens, and that is the whole
+ * interaction - a grid of twenty tiles that each lift, tilt and drop a shadow
+ * under the cursor is twenty things competing with the products they are
+ * supposed to be showing.
+ *
+ * The quick-add strip still rises over the image on a fine pointer, because it
+ * is a control appearing rather than an effect playing, and holding a card on
+ * a touch screen opens quick view.
  */
 export function ProductCard({
   product,
@@ -60,11 +55,7 @@ export function ProductCard({
   eager?: boolean;
 }) {
   const discount = discountPercent(product.price, product.compareAtPrice);
-  const reduced = useReducedMotion();
-
-  const ref = React.useRef<HTMLDivElement>(null);
   const finePointer = useFinePointer();
-  const tiltable = finePointer && !reduced;
 
   // Phase 11: holding a card on a touch screen opens the quick-view sheet. The
   // hook ignores mouse and pen pointers, so on a desktop this costs nothing but
@@ -72,40 +63,10 @@ export function ProductCard({
   const [quickViewOpen, setQuickViewOpen] = React.useState(false);
   const longPress = useLongPress(() => setQuickViewOpen(true), !finePointer);
 
-  const rawX = useMotionValue(0);
-  const rawY = useMotionValue(0);
-  const rotateX = useSpring(rawY, { stiffness: 240, damping: 22, mass: 0.4 });
-  const rotateY = useSpring(rawX, { stiffness: 240, damping: 22, mass: 0.4 });
-  const transform = useMotionTemplate`perspective(900px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
-
-  const handleMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!tiltable) return;
-    const rect = ref.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    // -1..1 from the centre of the card on each axis. The Y offset drives
-    // rotateX and is negated, because pushing the top away is a positive
-    // rotation about X.
-    const px = (event.clientX - rect.left) / rect.width - 0.5;
-    const py = (event.clientY - rect.top) / rect.height - 0.5;
-
-    rawX.set(px * MAX_TILT * 2);
-    rawY.set(-py * MAX_TILT * 2);
-  };
-
-  const resetTilt = () => {
-    rawX.set(0);
-    rawY.set(0);
-  };
-
   return (
     <motion.article variants={scaleIn} className="group/card h-full" {...longPress}>
-      <motion.div
-        ref={ref}
-        onPointerMove={handleMove}
-        onPointerLeave={resetTilt}
-        style={tiltable ? { transform, transformStyle: 'preserve-3d' } : undefined}
-        className="flex h-full flex-col overflow-hidden rounded-md border border-border bg-card transition-[box-shadow,transform,translate] duration-[250ms] ease-out hover:-translate-y-0.5 hover:shadow-float motion-reduce:hover:translate-y-0"
+      <div
+        className="flex h-full flex-col overflow-hidden rounded-md border border-border bg-card transition-colors duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:border-foreground/30"
       >
         <PrefetchLink
           href={`/products/${product.slug}`}
@@ -124,7 +85,7 @@ export function ProductCard({
               // observer; below it, it should.
               loading={eager ? 'eager' : 'lazy'}
               fetchPriority={eager ? 'high' : undefined}
-              className="object-cover transition-transform duration-[250ms] ease-out group-hover/card:scale-[1.08] motion-reduce:group-hover/card:scale-100"
+              className="object-cover transition-transform duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/card:scale-[1.04] motion-reduce:group-hover/card:scale-100"
               // The blurhash is decoded to a 32x32 data URI at build/render
               // time, so the tile is never an empty grey box waiting on the
               // network (A1.1).
@@ -195,7 +156,7 @@ export function ProductCard({
 
           <AddToCartButton product={product} />
         </div>
-      </motion.div>
+      </div>
 
       {/* Rendered only once opened: a listing page holds up to 48 cards, and 48
           mounted sheets would be 48 portals and 48 focus scopes for a surface
@@ -299,7 +260,7 @@ function WishlistButton({ productId, productName }: { productId: string; product
       aria-pressed={saved}
       disabled={pending}
       onClick={(event) => void handleClick(event)}
-      className="absolute top-2 right-2 grid size-8 cursor-pointer place-items-center rounded-full bg-background/80 backdrop-blur-sm transition-[background-color,transform] duration-200 hover:scale-110 hover:bg-background disabled:opacity-60 motion-reduce:hover:scale-100"
+      className="absolute top-2 right-2 grid size-8 cursor-pointer place-items-center rounded-full bg-background/80 backdrop-blur-sm transition-colors duration-[260ms] hover:bg-background disabled:opacity-60"
     >
       {pending ? (
         <Loader2 className="size-4 animate-spin text-muted-foreground" />

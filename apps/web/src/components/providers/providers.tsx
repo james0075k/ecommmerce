@@ -8,6 +8,7 @@ import { Tooltip } from 'radix-ui';
 import { AnalyticsProvider } from '@/components/providers/analytics-provider';
 import { AuthProvider } from '@/components/providers/auth-provider';
 import { CartProvider } from '@/components/providers/cart-provider';
+import { PostHogProvider } from '@/components/providers/posthog-provider';
 import { WebVitalsProvider } from '@/components/providers/web-vitals-provider';
 import { ServiceWorkerRegistrar } from '@/components/pwa/service-worker';
 import { Toaster } from '@/components/ui/sonner';
@@ -54,6 +55,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
               making every page dynamic (Phase 8). */}
           <React.Suspense fallback={null}>
             <AnalyticsProvider />
+            {/* Third-party, consent-gated, and inside the same boundary for the
+                same reason: it reads `useSearchParams` to build the pageview
+                URL (Phase 12.8). */}
+            <PostHogProvider />
           </React.Suspense>
           {/* Field Core Web Vitals (Phase 11). Renders nothing and reads only
               `usePathname`, so unlike the beacon above it does not force the

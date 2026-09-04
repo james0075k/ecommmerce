@@ -80,7 +80,6 @@ export function CategoryBento() {
   return (
     <section className="container-bazaar py-16 md:py-24">
       <SectionHeading
-        eyebrow="Browse"
         title="Start where you already know"
         description={
           categories.length > 0
@@ -171,7 +170,7 @@ function CategoryTile({
 
       <div className="relative flex items-end justify-between gap-3 p-4 text-white">
         <div className="min-w-0">
-          <h3 className="font-display truncate text-lg font-bold tracking-tight">
+          <h3 className="font-display truncate text-lg font-medium tracking-[-0.02em]">
             {category.name}
           </h3>
           <p className="numeric mt-0.5 text-xs text-white/75">

@@ -224,7 +224,7 @@ export function AdminSidebar({
           <Link
             href="/admin/dashboard"
             className={cn(
-              'font-display text-lg font-extrabold tracking-tight text-white',
+              'font-display text-lg font-medium tracking-tight text-white',
               collapsed && 'sr-only',
             )}
           >
@@ -282,7 +282,7 @@ export function AdminSidebar({
               }}
             >
               <div className="flex h-14 items-center justify-between border-b border-white/10 px-3">
-                <span className="font-display text-lg font-extrabold tracking-tight text-white">
+                <span className="font-display text-lg font-medium tracking-tight text-white">
                   Bazaar
                   <span className="ml-1.5 align-middle text-[10px] font-semibold tracking-widest text-slate-500 uppercase">
                     Admin

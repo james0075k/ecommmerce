@@ -1,0 +1,36 @@
+# ---------------------------------------------------------------------------
+# BAZAAR - build context exclusions
+#
+# The image is built from the repository root (see apps/api/Dockerfile), so
+# without this the context is the whole workspace including every node_modules
+# and .next directory - hundreds of megabytes uploaded to the daemon before the
+# first instruction runs.
+#
+# Excluding node_modules is not only about size: the host's tree is resolved for
+# Windows and would overwrite the Linux one installed inside the image.
+# ---------------------------------------------------------------------------
+
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+
+# Secrets. `.env.example` is the one that ships; a real .env baked into a layer
+# is readable by anyone who can pull the image, and deleting it in a later
+# instruction does not remove it from the earlier one.
+.env
+.env.*
+!.env.example
+
+.git
+.github
+.vscode
+.idea
+
+# Documentation and audit output - none of it is needed to build or run.
+*.md
+!apps/api/README.md
+.lighthouseci
+docker-compose.yml

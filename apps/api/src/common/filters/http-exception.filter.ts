@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import type { Request, Response } from 'express';
 
 interface ErrorBody {
@@ -52,6 +53,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
         `${request.method} ${request.url} -> ${status}`,
         exception instanceof Error ? exception.stack : String(exception),
       );
+
+      // Phase 12.8. Reported here rather than by Sentry's global filter, and
+      // only for 5xx: a 404 or a rejected DTO is the API working correctly, and
+      // an issue feed full of them is one nobody reads. `captureException` is a
+      // no-op when no DSN was configured, so this costs nothing locally.
+      Sentry.captureException(exception, {
+        tags: { route: request.route?.path ?? 'unmatched', method: request.method },
+        extra: { path: request.url },
+      });
     }
 
     response.status(status).json(body);

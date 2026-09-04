@@ -86,7 +86,7 @@ export function MobileMenu({
             <Link
               href="/"
               onClick={onClose}
-              className="font-display text-lg font-extrabold tracking-tight"
+              className="font-display text-lg font-medium tracking-tight"
             >
               Bazaar
             </Link>
@@ -123,7 +123,7 @@ export function MobileMenu({
               ))}
             </motion.nav>
 
-            <h2 className="mt-7 mb-2 font-mono text-xs tracking-widest text-muted-foreground uppercase">
+            <h2 className="mt-7 mb-2 bz-label text-muted-foreground">
               Departments
             </h2>
 

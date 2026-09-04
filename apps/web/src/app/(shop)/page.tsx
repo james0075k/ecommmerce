@@ -4,7 +4,6 @@ import { BrandMarquee } from '@/components/home/brand-marquee';
 import { CategoryBento } from '@/components/home/category-bento';
 import { FlashSale } from '@/components/home/flash-sale';
 import { HeroCarousel } from '@/components/home/hero-carousel';
-import { NewsletterSignup } from '@/components/home/newsletter-signup';
 import { RecommendedForYou } from '@/components/home/recommended-for-you';
 import { StoreStats } from '@/components/home/store-stats';
 import { Testimonials } from '@/components/home/testimonials';
@@ -40,7 +39,6 @@ export default function HomePage() {
       <RecommendedForYou />
       <Testimonials />
       <BrandMarquee />
-      <NewsletterSignup />
     </>
   );
 }

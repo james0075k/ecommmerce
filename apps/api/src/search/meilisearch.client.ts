@@ -25,6 +25,7 @@ export interface MeiliSearchResponse<T> {
 }
 
 export interface MeiliIndexSettings {
+  rankingRules?: string[];
   searchableAttributes?: string[];
   filterableAttributes?: string[];
   sortableAttributes?: string[];

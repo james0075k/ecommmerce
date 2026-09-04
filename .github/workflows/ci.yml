@@ -1,0 +1,173 @@
+name: CI
+
+# Phase 12.7, the pull-request gate: lint → typecheck → unit tests → build.
+#
+# It also runs on pushes to main. Not redundant with the PR run: a merge queue,
+# a direct push, or two PRs that pass separately and conflict once merged all
+# produce a main commit nothing has ever built.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A force-push should cancel the run it superseded. Never on main, where each
+# commit is the input to a deploy and the audit trail matters more than minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  # Turborepo caches by task input hash, so a PR touching only the storefront
+  # replays the API's tasks instead of re-running them.
+  TURBO_TELEMETRY_DISABLED: 1
+  NEXT_TELEMETRY_DISABLED: 1
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Everything that needs no services. One job rather than four: the install is
+  # ~40 seconds and four jobs would pay it four times to save nothing.
+  # ---------------------------------------------------------------------------
+  verify:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # The Next build reads these at build time. They are placeholders on
+      # purpose - CI proves the code compiles, not that it can reach staging,
+      # and a build that needs production secrets is a build forks cannot run.
+      DATABASE_URL: postgresql://bazaar:bazaar@localhost:5432/bazaar?schema=public
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      JWT_SECRET: ci-not-a-real-secret-at-least-32-characters
+      JWT_REFRESH_SECRET: ci-not-a-real-refresh-secret-32-characters
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # The client is a build input for the API's typecheck: without it every
+      # Prisma model resolves to `any` and the typecheck passes while being
+      # meaningless. The root postinstall does this too; repeated here so the
+      # dependency is visible rather than incidental.
+      - name: Generate the Prisma client
+        run: pnpm db:generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  # ---------------------------------------------------------------------------
+  # The image has its own job because it is the slowest thing here and it fails
+  # for reasons the rest never touches: a missing COPY, a stale lockfile inside
+  # the container, a native module that will not build on musl.
+  # ---------------------------------------------------------------------------
+  docker:
+    name: Build the API image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          # The repository root, not apps/api - the Dockerfile needs the
+          # workspace, the lockfile and prisma/.
+          context: .
+          file: apps/api/Dockerfile
+          # Never pushed from CI. Railway builds and hosts the real image; this
+          # only proves the Dockerfile still works before a deploy discovers it
+          # does not.
+          push: false
+          load: true
+          tags: bazaar-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: The image starts and answers its own health check
+        run: |
+          docker run -d --name bazaar-api-ci \
+            -e NODE_ENV=production \
+            -e RUN_MIGRATIONS=false \
+            -e DATABASE_URL='postgresql://nobody:nobody@127.0.0.1:5432/nothing' \
+            -e JWT_SECRET='ci-not-a-real-secret-at-least-32-characters' \
+            -e JWT_REFRESH_SECRET='ci-not-a-real-refresh-secret-32-characters' \
+            -p 4000:4000 bazaar-api:ci
+
+          # No database is attached deliberately: the API is meant to boot
+          # degraded rather than crash-loop (D3), and /health/live is the probe
+          # that must answer regardless. A container that cannot do this would
+          # be restarted forever by the platform during a database incident.
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:4000/api/v1/health/live > /dev/null; then
+              echo "liveness probe answered after ${attempt}s"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "the container never became live:"
+          docker logs bazaar-api-ci
+          exit 1
+
+      - name: Container logs
+        if: always()
+        run: docker logs bazaar-api-ci || true
+
+  # ---------------------------------------------------------------------------
+  # Phase 12.9: "dependency audit passes (no critical CVEs)".
+  # ---------------------------------------------------------------------------
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # `--audit-level high` fails on high and critical and reports the rest.
+      # Failing on every moderate advisory sounds stricter and is not: a gate
+      # that is red for a fortnight over a ReDoS in a build-time formatter gets
+      # ignored, and then the critical one is ignored with it.
+      - name: Audit
+        run: pnpm audit --audit-level high --prod
+
+      - name: Full report (informational)
+        if: always()
+        run: pnpm audit || true

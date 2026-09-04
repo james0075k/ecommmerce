@@ -158,7 +158,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
             <div className="mt-4 min-h-0 flex-1 overflow-y-auto rounded-lg">
               {debounced.length < 2 ? (
                 <div className="space-y-3 rounded-lg border border-border bg-card p-4">
-                  <p className="flex items-center gap-2 font-mono text-xs tracking-widest text-muted-foreground uppercase">
+                  <p className="flex items-center gap-2 bz-label text-muted-foreground">
                     <TrendingUp className="size-3.5" />
                     {suggestions.length > 0 ? 'Brands in stock' : 'Popular searches'}
                   </p>

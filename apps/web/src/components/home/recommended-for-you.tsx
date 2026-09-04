@@ -49,7 +49,6 @@ export function RecommendedForYou() {
   return (
     <section className="bz-defer-paint container-bazaar py-16 md:py-24">
       <SectionHeading
-        eyebrow="For you"
         title={reason === 'POPULAR' ? 'Popular right now' : 'Recommended for you'}
         description={DESCRIPTIONS[reason] ?? RECOMMENDATION_REASON_LABELS.POPULAR}
         action={{ label: 'Browse everything', href: '/products' }}

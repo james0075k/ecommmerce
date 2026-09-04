@@ -1,0 +1,236 @@
+name: Deploy
+
+# Phase 12.7, the main pipeline:
+#
+#   build → migrate + deploy staging → smoke → promote production → smoke
+#
+# Every step gates the next. The promote job cannot start until staging has
+# answered a real HTTP request correctly, which is the entire point of having a
+# staging environment at all.
+#
+# Production sits behind a GitHub Environment (`production`) so a required
+# reviewer can be added there without touching this file.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_staging:
+        description: 'Promote straight to production (hotfix only)'
+        type: boolean
+        default: false
+
+# Deploys are serialised and never cancelled mid-flight: killing a job between
+# `migrate deploy` and the container starting leaves a database ahead of the
+# code running against it.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+  NEXT_TELEMETRY_DISABLED: 1
+
+jobs:
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build and verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      DATABASE_URL: postgresql://bazaar:bazaar@localhost:5432/bazaar?schema=public
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      JWT_SECRET: ci-not-a-real-secret-at-least-32-characters
+      JWT_REFRESH_SECRET: ci-not-a-real-refresh-secret-32-characters
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  # ---------------------------------------------------------------------------
+  # Staging. Railway builds the image itself from railway.toml, so this job
+  # triggers the deploy and waits rather than pushing artifacts.
+  # ---------------------------------------------------------------------------
+  deploy-staging:
+    name: Deploy to staging
+    needs: build
+    if: ${{ !inputs.skip_staging }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_WEB_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # --- API ---------------------------------------------------------------
+      # `--service` is required: the project holds Postgres and Redis too, and
+      # `railway up` without it deploys to whichever service was linked last.
+      #
+      # Migrations run inside the container on boot (docker-entrypoint.sh), so
+      # there is no separate migrate step here. `prisma migrate deploy` takes an
+      # advisory lock, which is what makes that safe at two replicas.
+      - name: Deploy the API
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+        run: |
+          npm install -g @railway/cli@4
+          railway up \
+            --service "${{ vars.RAILWAY_API_SERVICE_STAGING }}" \
+            --environment staging \
+            --ci
+
+      # --- Storefront --------------------------------------------------------
+      - name: Deploy the storefront
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npm install -g vercel@latest
+          vercel pull --yes --environment=preview --token="${{ secrets.VERCEL_TOKEN }}"
+          vercel build --token="${{ secrets.VERCEL_TOKEN }}"
+          vercel deploy --prebuilt --token="${{ secrets.VERCEL_TOKEN }}"
+
+  # ---------------------------------------------------------------------------
+  smoke-staging:
+    name: Smoke test staging
+    needs: deploy-staging
+    if: ${{ !inputs.skip_staging }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # Railway's health check has already passed by the time `railway up`
+      # returns, but a CDN in front of Vercel can take a few seconds to serve
+      # the new deployment.
+      - name: Wait for the edge to settle
+        run: sleep 20
+
+      - name: Smoke test
+        run: |
+          node scripts/smoke-test.mjs \
+            --web "${{ vars.STAGING_WEB_URL }}" \
+            --api "${{ vars.STAGING_API_URL }}"
+
+  # ---------------------------------------------------------------------------
+  # Production. `always()` plus the explicit result checks is what lets a
+  # `skip_staging` hotfix run while still refusing to promote a red staging.
+  # ---------------------------------------------------------------------------
+  promote-production:
+    name: Promote to production
+    needs: [build, smoke-staging]
+    if: >-
+      ${{
+        always()
+        && needs.build.result == 'success'
+        && (needs['smoke-staging'].result == 'success' || inputs.skip_staging)
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_WEB_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Deploy the API
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_PRODUCTION }}
+        run: |
+          npm install -g @railway/cli@4
+          railway up \
+            --service "${{ vars.RAILWAY_API_SERVICE_PRODUCTION }}" \
+            --environment production \
+            --ci
+
+      - name: Deploy the storefront
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          # Tags the release in Sentry and stamps /health, so an error report
+          # names the commit that caused it.
+          RELEASE_VERSION: ${{ github.sha }}
+          NEXT_PUBLIC_RELEASE_VERSION: ${{ github.sha }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          npm install -g vercel@latest
+          vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+          vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+          vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+  # ---------------------------------------------------------------------------
+  smoke-production:
+    name: Smoke test production
+    needs: promote-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Wait for the edge to settle
+        run: sleep 20
+
+      # A failure here is the signal to roll back, and rolling back is manual on
+      # purpose: an automatic rollback after migrations have run needs a down
+      # migration that has itself been tested, and an untested automatic
+      # rollback is a second incident on top of the first. docs/DEPLOYMENT.md
+      # has the procedure.
+      - name: Smoke test
+        run: |
+          node scripts/smoke-test.mjs \
+            --web "${{ vars.PRODUCTION_WEB_URL }}" \
+            --api "${{ vars.PRODUCTION_API_URL }}"
+
+      - name: If this failed
+        if: failure()
+        run: |
+          echo "::error::Production smoke tests failed after promoting ${{ github.sha }}."
+          echo "::error::Roll back from the Railway and Vercel dashboards - see docs/DEPLOYMENT.md."
+          exit 1

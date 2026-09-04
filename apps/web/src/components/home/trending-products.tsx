@@ -36,7 +36,6 @@ export function TrendingProducts() {
   return (
     <section className="bz-defer-paint container-bazaar py-16 md:py-24">
       <SectionHeading
-        eyebrow="Trending"
         title="What everyone is buying this week"
         description="Ranked by what actually left the warehouse, not by what we would like to sell."
         action={{ label: 'See all products', href: '/products' }}

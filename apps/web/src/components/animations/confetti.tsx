@@ -15,7 +15,7 @@ interface Piece {
 }
 
 /** Brand palette - the confetti should look like Bazaar, not like a party shop. */
-const COLORS = ['#6C3CE1', '#FF6B35', '#00C48C', '#F59E0B', '#4C8DFF'];
+const COLORS = ['#3B372F', '#A8442F', '#4E7A41', '#9A7420', '#8C7C60'];
 
 const GRAVITY = 0.22;
 const DRAG = 0.995;

@@ -104,7 +104,6 @@ export function Testimonials() {
     <section className="bz-defer-paint overflow-hidden py-16 md:py-24">
       <div className="container-bazaar">
         <SectionHeading
-          eyebrow="Word of mouth"
           title="What shoppers say once the box arrives"
           description="Six of the reviews that keep coming back to the same three things: it arrives, it is what was pictured, and paying was not a fight."
           align="center"
@@ -138,7 +137,7 @@ export function Testimonials() {
 
 function TestimonialCard({ testimonial }: { testimonial: Testimonial }) {
   return (
-    <figure className="flex w-[19rem] shrink-0 flex-col gap-4 rounded-lg border border-border bg-card p-5 transition-shadow duration-300 hover:shadow-float md:w-[22rem]">
+    <figure className="flex w-[19rem] shrink-0 flex-col gap-4 rounded-md border border-border bg-card p-5 transition-colors duration-[400ms] hover:border-foreground/30 md:w-[22rem]">
       <div className="flex items-center justify-between gap-3">
         <StarRating rating={testimonial.rating} size="sm" />
         <Quote className="size-5 shrink-0 text-primary/30" aria-hidden />

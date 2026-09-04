@@ -1,5 +1,8 @@
 import withBundleAnalyzer from '@next/bundle-analyzer';
+import { withSentryConfig } from '@sentry/nextjs';
 import type { NextConfig } from 'next';
+
+import { buildContentSecurityPolicy } from './csp';
 
 /**
  * `pnpm --filter @bazaar/web analyze` sets ANALYZE=true and opens the treemaps
@@ -60,12 +63,14 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  // D4 security headers. CSP is added in Phase 12 once the CDN origins exist.
+  // D4 security headers. Phase 12 adds the CSP, now that the CDN, Sentry and
+  // payment-gateway origins exist to name - see ./csp.ts.
   async headers() {
     return [
       {
         source: '/:path*',
         headers: [
+          { key: 'Content-Security-Policy', value: buildContentSecurityPolicy(process.env) },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
@@ -73,6 +78,22 @@ const nextConfig: NextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=(self)',
           },
+          // Isolates this origin from anything a shopper has open in another
+          // tab: an opener cannot reach `window` here, and this browsing
+          // context group is its own.
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          // HSTS: two years, subdomains included, and preloadable. Production
+          // only - a localhost entry is cached for the full max-age and then
+          // breaks every other http://localhost project on the machine, which
+          // is genuinely painful to undo.
+          ...(isProduction
+            ? [
+                {
+                  key: 'Strict-Transport-Security',
+                  value: 'max-age=63072000; includeSubDomains; preload',
+                },
+              ]
+            : []),
         ],
       },
       // Build output is content-addressed - the filenames carry a hash, so a
@@ -130,4 +151,37 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default analyze(nextConfig);
+/**
+ * Sentry's build plugin (Phase 12.8). It does two things: rewrites the client
+ * bundle so a minified stack trace can be symbolicated, and uploads the source
+ * maps that make that possible.
+ *
+ * The upload needs SENTRY_AUTH_TOKEN, SENTRY_ORG and SENTRY_PROJECT, which only
+ * CI has. Without them the plugin skips the upload and the build still
+ * succeeds, so a local `pnpm build` behaves exactly as it did before Phase 12.
+ */
+export default withSentryConfig(analyze(nextConfig), {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // The plugin is chatty and its output is not useful on a green build.
+  silent: !process.env.CI,
+
+  // Uploaded and then deleted from the deployment. A .map served next to the
+  // bundle hands your whole source tree to anyone who opens devtools.
+  sourcemaps: { deleteSourcemapsAfterUpload: true },
+
+  // Proxies Sentry's ingest through the app's own origin, so an ad blocker
+  // does not silently drop every error report. It costs one rewrite rule and
+  // is the difference between an issue feed and an empty one.
+  tunnelRoute: '/monitoring',
+
+  // Strips Sentry's own debug logging from the client bundle. Phase 11's
+  // first-load budget is measured in kilobytes and this is a few of them.
+  disableLogger: true,
+
+  // Instruments server components and route handlers on Vercel without a
+  // separate build step.
+  automaticVercelMonitors: true,
+});

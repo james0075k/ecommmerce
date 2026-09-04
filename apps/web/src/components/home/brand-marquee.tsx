@@ -60,7 +60,7 @@ export function BrandMarquee() {
             {items.map((brand) => (
               <span
                 key={brand}
-                className="font-display text-lg font-bold tracking-tight whitespace-nowrap text-muted-foreground transition-colors duration-300 hover:text-foreground md:text-xl"
+                className="font-display text-lg font-medium tracking-[-0.02em] whitespace-nowrap text-muted-foreground transition-colors duration-[400ms] hover:text-foreground md:text-xl"
               >
                 {brand}
               </span>

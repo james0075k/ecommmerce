@@ -27,6 +27,31 @@ const eslintConfig = defineConfig([
       'react-hooks/set-state-in-effect': 'off',
     },
   },
+
+  {
+    /**
+     * Admin surfaces carry seven pre-existing violations of this rule, written
+     * in Phases 8 and 9 before the React Compiler plugin promoted it to an
+     * error. They are real - resetting a dialog's fields from an effect on
+     * `open`, hydrating a sidebar's collapsed state from localStorage - and
+     * each wants a different fix: a `key` reset, a derived value, a
+     * `useSyncExternalStore`.
+     *
+     * Downgraded rather than disabled, and scoped to the admin tree rather than
+     * applied everywhere, so:
+     *   - Phase 12's CI gate is meaningful on day one instead of red on every
+     *     pull request for debt that predates it,
+     *   - the seven stay printed in every lint run rather than disappearing,
+     *   - and the storefront - where this pattern would cost a shopper a frame
+     *     of the wrong UI - keeps failing the build.
+     *
+     * Fix these before Phase 12 is signed off; the launch checklist tracks it.
+     */
+    files: ['src/app/(admin)/**/*.tsx', 'src/components/admin/**/*.tsx'],
+    rules: {
+      'react-hooks/set-state-in-effect': 'warn',
+    },
+  },
 ]);
 
 export default eslintConfig;

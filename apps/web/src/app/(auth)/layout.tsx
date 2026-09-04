@@ -13,7 +13,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="container-bazaar flex h-14 items-center justify-between">
           <Link
             href="/"
-            className="font-display text-lg font-extrabold tracking-tight transition-opacity hover:opacity-70"
+            className="font-display text-lg font-medium tracking-tight transition-opacity hover:opacity-70"
           >
             Bazaar
           </Link>

@@ -1,31 +1,31 @@
 'use client';
 
 import Link from 'next/link';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingBag } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/lib/hooks/use-media-query';
 import { selectCartCount, useCartStore } from '@/lib/store/cart-store';
 import { cn } from '@/lib/utils';
 
 /**
- * The navbar cart icon and its count badge.
+ * The navbar cart control.
  *
- * H2: the icon bounces to 1.3 and settles over 400ms whenever something is
- * added. The animation is a CSS class (`bz-cart-bounce`, from the Phase 1
- * catalog) rather than Framer Motion - it is a one-shot keyframe with no
- * orchestration, and CSS is both cheaper and already disabled under
- * prefers-reduced-motion.
+ * On a pointer it is a word and a number - "Cart (2)" - because the count is
+ * the information and a superscript badge on an icon makes you squint at it.
+ * Below `lg` the label gives way to the bag icon, and the tap navigates to
+ * `/cart` rather than opening the drawer: the drawer earns its keep by leaving
+ * the page behind it visible, which a panel the width of a phone does not.
+ *
+ * The count bounces to 1.3 and settles over 400ms whenever something is added.
+ * The animation is a CSS class (`bz-cart-bounce`) rather than Framer Motion -
+ * it is a one-shot keyframe with no orchestration, and CSS is both cheaper and
+ * already disabled under prefers-reduced-motion.
  *
  * Replaying it is done with a `key` derived from the store's add counter: a
  * changing key remounts the element, and a fresh element restarts its CSS
  * animation. Doing it with an effect and a timer would mean calling setState
  * during an effect on every add, which is the cascading-render pattern React
  * warns about.
- *
- * Phase 11: below `lg` this navigates to `/cart` rather than opening the
- * drawer. The drawer's whole value is keeping the page behind it visible, which
- * a panel the width of a phone does not do.
  */
 export function CartButton({ overlay = false }: { overlay?: boolean }) {
   const open = useCartStore((state) => state.open);
@@ -38,55 +38,46 @@ export function CartButton({ overlay = false }: { overlay?: boolean }) {
   // something the shopper did not do.
   const bounce = bounceToken > 0 && 'bz-cart-bounce';
 
+  const className = cn(
+    'bz-label bz-underline inline-flex cursor-pointer items-center py-1.5 transition-colors duration-[260ms] max-lg:justify-center',
+    overlay ? 'text-white/85 hover:text-white' : 'text-muted-foreground hover:text-foreground',
+  );
+
+  const label = count > 0 ? `${count} items in your cart` : 'Your cart';
+
   const content = (
     <>
-      <span key={`icon-${bounceToken}`} className={cn('contents', bounce)}>
-        <ShoppingCart className={cn('size-4', bounce)} />
-      </span>
-
-      {ready && count > 0 ? (
-        <span
-          key={`badge-${bounceToken}`}
-          className={cn(
-            'numeric absolute -top-1.5 -right-1.5 grid min-w-4.5 place-items-center rounded-full bg-primary-solid px-1 text-[10px] leading-4.5 font-semibold text-primary-foreground',
-            bounce,
-          )}
-          // The button's aria-label already announces the count; repeating it
-          // here would read it twice.
-          aria-hidden
-        >
-          {count > 99 ? '99+' : count}
+      <ShoppingBag
+        key={`icon-${bounceToken}`}
+        className={cn('size-5 lg:hidden', bounce)}
+        aria-hidden
+      />
+      <span className="hidden lg:inline">
+        Cart{' '}
+        <span key={`count-${bounceToken}`} className={cn('numeric inline-block', bounce)}>
+          ({ready ? (count > 99 ? '99+' : count) : 0})
         </span>
-      ) : null}
+      </span>
     </>
   );
 
-  const className = cn('relative', overlay && 'text-white hover:bg-white/15 hover:text-white');
-  const label = count > 0 ? `${count} items in your cart` : 'Your cart';
-
   if (isMobile) {
     return (
-      <Button
-        asChild
-        variant={overlay ? 'ghost' : 'outline'}
-        size="icon"
-        className={className}
-        aria-label={label}
-      >
-        <Link href="/cart">{content}</Link>
-      </Button>
+      <Link href="/cart" data-slot="nav-control" className={className} aria-label={label}>
+        {content}
+      </Link>
     );
   }
 
   return (
-    <Button
-      variant={overlay ? 'ghost' : 'outline'}
-      size="icon"
+    <button
+      type="button"
       onClick={open}
+      data-slot="nav-control"
       className={className}
       aria-label={count > 0 ? `Open cart, ${count} items` : 'Open cart'}
     >
       {content}
-    </Button>
+    </button>
   );
 }

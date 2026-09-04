@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { coordinatesFor, LOW_STOCK_THRESHOLD } from '@bazaar/shared';
 import type {
@@ -22,6 +22,7 @@ import type {
   TrafficSourceRow,
 } from '@bazaar/shared';
 
+import { PRISMA_READ, type PrismaRead } from '../prisma/prisma-read';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -75,7 +76,23 @@ const SOURCE_NAMES: ReadonlyArray<{ match: RegExp; label: string }> = [
 export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  /**
+   * Two clients, on purpose (Phase 12.3).
+   *
+   * `read` is the replica when DATABASE_REPLICA_URL is set and the primary when
+   * it is not, so this file is correct either way. Every aggregate below scans
+   * months of orders and page views; on the primary those compete for
+   * connections and buffer cache with checkout, and an admin opening the
+   * dashboard should not be able to slow down a shopper paying for something.
+   *
+   * `prisma` stays for the two tracking inserts. A write to a replica fails
+   * outright, and reading your own write back through replication lag is the
+   * other half of why the split is explicit rather than global.
+   */
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(PRISMA_READ) private readonly read: PrismaRead,
+  ) {}
 
   /* ====================================================================== */
   /*  Dashboard                                                             */
@@ -182,7 +199,7 @@ export class AnalyticsService {
   async productPerformance(range: AnalyticsRangeInput, limit = 50): Promise<ProductPerformanceRow[]> {
     const { from, to } = resolveRange(range);
 
-    const grouped = await this.prisma.orderItem.groupBy({
+    const grouped = await this.read.orderItem.groupBy({
       by: ['productId'],
       where: {
         productId: { not: null },
@@ -200,7 +217,7 @@ export class AnalyticsService {
     if (productIds.length === 0) return [];
 
     const [products, refunded, views] = await Promise.all([
-      this.prisma.product.findMany({
+      this.read.product.findMany({
         where: { id: { in: productIds } },
         select: {
           id: true,
@@ -210,7 +227,7 @@ export class AnalyticsService {
           category: { select: { name: true } },
         },
       }),
-      this.prisma.orderItem.groupBy({
+      this.read.orderItem.groupBy({
         by: ['productId'],
         where: {
           productId: { in: productIds },
@@ -269,7 +286,7 @@ export class AnalyticsService {
   async trafficSources(range: AnalyticsRangeInput): Promise<TrafficSourceRow[]> {
     const { from, to } = resolveRange(range);
 
-    const rows = await this.prisma.pageView.findMany({
+    const rows = await this.read.pageView.findMany({
       where: { createdAt: { gte: from, lte: to } },
       select: { referrer: true, sessionId: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
@@ -320,7 +337,7 @@ export class AnalyticsService {
   async geography(range: AnalyticsRangeInput): Promise<GeoRow[]> {
     const { from, to } = resolveRange(range);
 
-    const orders = await this.prisma.order.findMany({
+    const orders = await this.read.order.findMany({
       where: { status: { in: REVENUE_STATUSES }, createdAt: { gte: from, lte: to } },
       select: { shippingAddress: true, total: true, userId: true, guestEmail: true },
       take: 20_000,
@@ -439,7 +456,7 @@ export class AnalyticsService {
     from: Date | null,
     to: Date,
   ): Promise<{ revenue: number; orders: number }> {
-    const result = await this.prisma.order.aggregate({
+    const result = await this.read.order.aggregate({
       where: {
         status: { in: REVENUE_STATUSES },
         createdAt: { ...(from && { gte: from }), lte: to },
@@ -455,7 +472,7 @@ export class AnalyticsService {
   }
 
   private async orderStatusCounts(): Promise<DashboardOrderCounts> {
-    const grouped = await this.prisma.order.groupBy({
+    const grouped = await this.read.order.groupBy({
       by: ['status'],
       _count: { _all: true },
     });
@@ -486,11 +503,11 @@ export class AnalyticsService {
     const previousFrom = new Date(from.getTime() - (to.getTime() - from.getTime()));
 
     const [total, current, previous] = await Promise.all([
-      this.prisma.user.count({ where: { role: 'CUSTOMER' } }),
-      this.prisma.user.count({
+      this.read.user.count({ where: { role: 'CUSTOMER' } }),
+      this.read.user.count({
         where: { role: 'CUSTOMER', createdAt: { gte: from, lte: to } },
       }),
-      this.prisma.user.count({
+      this.read.user.count({
         where: { role: 'CUSTOMER', createdAt: { gte: previousFrom, lt: from } },
       }),
     ]);
@@ -517,7 +534,7 @@ export class AnalyticsService {
     // each one. Prisma.join builds the placeholder list, so the statuses are
     // still parameters and never interpolated text.
     const [orderRows, refundRows] = await Promise.all([
-      this.prisma.$queryRaw<Array<{ bucket: Date; revenue: unknown; orders: bigint }>>(Prisma.sql`
+      this.read.$queryRaw<Array<{ bucket: Date; revenue: unknown; orders: bigint }>>(Prisma.sql`
         SELECT date_trunc(${granularity}, created_at) AS bucket,
                COALESCE(SUM(total), 0)               AS revenue,
                COUNT(*)                              AS orders
@@ -528,7 +545,7 @@ export class AnalyticsService {
         GROUP BY 1
         ORDER BY 1
       `),
-      this.prisma.$queryRaw<Array<{ bucket: Date; refunds: unknown }>>(Prisma.sql`
+      this.read.$queryRaw<Array<{ bucket: Date; refunds: unknown }>>(Prisma.sql`
         SELECT date_trunc(${granularity}, created_at) AS bucket,
                COALESCE(SUM(amount), 0)              AS refunds
         FROM refunds
@@ -571,7 +588,7 @@ export class AnalyticsService {
   ): Promise<AnalyticsSeriesPoint[]> {
     const [revenue, visitors] = await Promise.all([
       this.revenueSeries(from, to, granularity),
-      this.prisma.$queryRaw<Array<{ bucket: Date; sessions: bigint }>>(Prisma.sql`
+      this.read.$queryRaw<Array<{ bucket: Date; sessions: bigint }>>(Prisma.sql`
         SELECT date_trunc(${granularity}, created_at) AS bucket,
                COUNT(DISTINCT session_id)            AS sessions
         FROM page_views
@@ -602,18 +619,18 @@ export class AnalyticsService {
 
   private async totalsBetween(from: Date, to: Date): Promise<AnalyticsTotals> {
     const [orders, units, sessions, refunds, newCustomers] = await Promise.all([
-      this.prisma.order.aggregate({
+      this.read.order.aggregate({
         where: { status: { in: REVENUE_STATUSES }, createdAt: { gte: from, lte: to } },
         _sum: { total: true },
         _count: { _all: true },
       }),
-      this.prisma.orderItem.aggregate({
+      this.read.orderItem.aggregate({
         where: {
           order: { status: { in: REVENUE_STATUSES }, createdAt: { gte: from, lte: to } },
         },
         _sum: { quantity: true },
       }),
-      this.prisma.pageView
+      this.read.pageView
         .findMany({
           where: { createdAt: { gte: from, lte: to } },
           distinct: ['sessionId'],
@@ -621,11 +638,11 @@ export class AnalyticsService {
           take: 100_000,
         })
         .then((rows) => rows.length),
-      this.prisma.refund.aggregate({
+      this.read.refund.aggregate({
         where: { status: 'COMPLETED', createdAt: { gte: from, lte: to } },
         _sum: { amount: true },
       }),
-      this.prisma.user.count({
+      this.read.user.count({
         where: { role: 'CUSTOMER', createdAt: { gte: from, lte: to } },
       }),
     ]);
@@ -646,7 +663,7 @@ export class AnalyticsService {
   }
 
   async topProducts(from: Date, to: Date, limit: number): Promise<TopProductRow[]> {
-    const grouped = await this.prisma.orderItem.groupBy({
+    const grouped = await this.read.orderItem.groupBy({
       by: ['productId'],
       where: {
         productId: { not: null },
@@ -661,7 +678,7 @@ export class AnalyticsService {
     const ids = grouped.map((row) => row.productId).filter((id): id is string => id !== null);
     if (ids.length === 0) return [];
 
-    const products = await this.prisma.product.findMany({
+    const products = await this.read.product.findMany({
       where: { id: { in: ids } },
       select: {
         id: true,
@@ -698,7 +715,7 @@ export class AnalyticsService {
   }
 
   async topCustomers(limit: number): Promise<TopCustomerRow[]> {
-    const grouped = await this.prisma.order.groupBy({
+    const grouped = await this.read.order.groupBy({
       by: ['userId'],
       where: { userId: { not: null }, status: { in: REVENUE_STATUSES } },
       _sum: { total: true },
@@ -711,7 +728,7 @@ export class AnalyticsService {
     const ids = grouped.map((row) => row.userId).filter((id): id is string => id !== null);
     if (ids.length === 0) return [];
 
-    const users = await this.prisma.user.findMany({
+    const users = await this.read.user.findMany({
       where: { id: { in: ids } },
       select: { id: true, fullName: true, email: true, avatarUrl: true },
     });
@@ -737,7 +754,7 @@ export class AnalyticsService {
   }
 
   async recentOrders(limit: number): Promise<RecentOrderRow[]> {
-    const orders = await this.prisma.order.findMany({
+    const orders = await this.read.order.findMany({
       orderBy: { createdAt: 'desc' },
       take: limit,
       select: {
@@ -782,7 +799,7 @@ export class AnalyticsService {
    * gets alerts against the store-wide default rather than silence.
    */
   async lowStock(limit: number): Promise<LowStockRow[]> {
-    const variants = await this.prisma.productVariant.findMany({
+    const variants = await this.read.productVariant.findMany({
       where: {
         isActive: true,
         stockQuantity: { lte: LOW_STOCK_THRESHOLD },
@@ -830,7 +847,7 @@ export class AnalyticsService {
    * campaign pages that have no product behind them at all.
    */
   private async productViews(from: Date, to: Date): Promise<Map<string, number>> {
-    const rows = await this.prisma.pageView.findMany({
+    const rows = await this.read.pageView.findMany({
       where: {
         createdAt: { gte: from, lte: to },
         pagePath: { startsWith: '/products/' },

@@ -100,6 +100,25 @@ export class SearchService implements OnModuleInit {
     await this.client.createIndex(PRODUCT_INDEX, 'id');
 
     await this.client.updateSettings(PRODUCT_INDEX, {
+      /**
+       * The blueprint's ranking order (Phase 12.5). It is also Meilisearch's
+       * documented default, and it is written out anyway: relevance is the one
+       * thing in the catalogue nobody can eyeball a regression in, so an
+       * upgrade that reorders the defaults should change this file rather than
+       * quietly change the results.
+       *
+       *   words      how many query terms the document matched
+       *   typo       fewer typos first
+       *   proximity  matched terms close together first
+       *   attribute  a hit in `name` beats a hit in `description`
+       *   sort       the caller's explicit sort, applied here and no earlier
+       *   exactness  exact terms before prefix matches
+       *
+       * Appending `rating:desc` would bias toward well-reviewed products, and
+       * is deliberately not done: it outranks relevance for every query, so a
+       * search for a specific SKU starts returning a different popular one.
+       */
+      rankingRules: ['words', 'typo', 'proximity', 'attribute', 'sort', 'exactness'],
       searchableAttributes: ['name', 'brand', 'tags', 'shortDescription', 'description', 'sku'],
       filterableAttributes: [
         'categoryId',

@@ -352,7 +352,13 @@ model ProductVariant {
 model ProductImage {
   id        String  @id @default(uuid()) @db.Uuid
   productId String  @map("product_id") @db.Uuid
+  /// What the storefront renders. After Phase 12 this is the compressed
+  /// derivative, not the file the admin uploaded.
   url       String  @db.Text
+  /// The uploaded original, kept when a derivative replaced it (Phase 12.6).
+  /// Null means `url` *is* the original - either the file was already small
+  /// enough or S3 was not configured when it was attached.
+  originalUrl String? @map("original_url") @db.Text
   altText   String? @map("alt_text") @db.VarChar(200)
   sortOrder Int     @default(0) @map("sort_order")
   isPrimary Boolean @default(false) @map("is_primary")

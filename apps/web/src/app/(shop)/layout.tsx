@@ -2,7 +2,9 @@ import { ChatWidget } from '@/components/ai/chat-widget-lazy';
 import { PageTransition } from '@/components/animations/page-transition';
 import { ScrollProgress } from '@/components/animations/scroll-progress';
 import { CartDrawer } from '@/components/cart/cart-drawer';
+import { AnnouncementBar } from '@/components/layout/announcement-bar';
 import { BottomNav } from '@/components/layout/bottom-nav';
+import { CookieConsent } from '@/components/layout/cookie-consent';
 import { SiteFooter } from '@/components/layout/site-footer';
 import { SiteHeader } from '@/components/layout/site-header';
 import { InstallPrompt } from '@/components/pwa/install-prompt';
@@ -24,6 +26,9 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
       <ScrollProgress />
+      {/* Above the header rather than inside it: the shipping promise is read
+          once and then scrolls away, while the bar it sits on top of sticks. */}
+      <AnnouncementBar />
       <SiteHeader />
 
       <main id="main" className="flex-1">
@@ -43,6 +48,9 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           its chunk is off the critical path (Phase 11). */}
       <ChatWidget />
       <InstallPrompt />
+      {/* Storefront only. An administrator is not a data subject browsing a
+          shop, and /admin loads no third-party analytics to consent to. */}
+      <CookieConsent />
     </div>
   );
 }

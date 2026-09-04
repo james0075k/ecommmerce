@@ -1,0 +1,59 @@
+# ---------------------------------------------------------------------------
+# BAZAAR API on Railway  (Phase 12.2)
+#
+# Railway reads this from the repository root. The frontend is NOT deployed
+# here - it is on Vercel, configured by vercel.json.
+#
+# Everything below is deployment shape. Secrets are set in the Railway
+# dashboard (or `railway variables set`) and never in this file: it is
+# committed, and a committed secret is a leaked secret.
+# ---------------------------------------------------------------------------
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/api/Dockerfile"
+# The build context is the repo root, so a change anywhere in the workspace can
+# invalidate the image. Watch only what the API image is actually built from -
+# a storefront-only commit should not rebuild and redeploy the backend.
+watchPatterns = [
+  "apps/api/**",
+  "packages/shared/**",
+  "prisma/**",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "railway.toml",
+]
+
+[deploy]
+# Readiness, not liveness, and not `/health`: this decides when the new
+# deployment starts receiving traffic. `/health` answers 200 while degraded by
+# design, which would cut traffic over to an instance that cannot reach the
+# database.
+healthcheckPath = "/api/v1/health/ready"
+# Generous, because the first boot of a release also applies migrations. If a
+# migration ever takes longer than this, move it to preDeployCommand below
+# rather than raising the number - see apps/api/docker-entrypoint.sh.
+healthcheckTimeout = 300
+
+# Migrations run in the entrypoint by default. Uncomment to run them once per
+# release instead of once per instance, and set RUN_MIGRATIONS=false:
+# preDeployCommand = ["/app/apps/api/node_modules/.bin/prisma", "migrate", "deploy", "--schema=/app/prisma/schema.prisma"]
+
+# Blueprint 12.2: minimum two instances. One instance means every deploy and
+# every crash is downtime, and it also makes the Redis fallback store look like
+# it works - with two, a session written on one instance and read on the other
+# fails immediately and loudly, which is the correct signal.
+numReplicas = 2
+
+# Scale on CPU > 70%. Railway expresses the *target* in the service settings
+# rather than in this file; the runbook (docs/DEPLOYMENT.md) has the exact
+# dashboard path. Recorded here so the intended policy lives with the config.
+# Target: 70% CPU · min 2 · max 10.
+
+# ON_FAILURE, not ALWAYS: a container that exits 0 has been asked to stop, and
+# restarting it fights the deployment. Ten retries is enough to ride out a
+# database that is briefly unreachable and few enough that a genuinely broken
+# release stops crash-looping and shows up as failed.
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
