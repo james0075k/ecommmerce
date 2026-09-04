@@ -6,12 +6,13 @@ import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-qu
 import { motion } from 'framer-motion';
 import { LayoutGrid, PackageOpen, Rows3, SlidersHorizontal } from 'lucide-react';
 
-import { PRODUCT_SORT_OPTIONS } from '@bazaar/shared';
+import { PRODUCT_SORT_OPTIONS } from '@bazaar/shared/constants';
 import { staggerChildren } from '@bazaar/ui';
 
 import { CatalogFilters, type FilterState } from '@/components/shop/catalog-filters';
 import { ProductCard } from '@/components/shop/product-card';
 import { ProductGridSkeleton } from '@/components/shop/product-grid-skeleton';
+import { PullToRefresh } from '@/components/shop/pull-to-refresh';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,8 +25,25 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { apiFetch } from '@/lib/api';
 import type { CategoryNode, ProductListResponse } from '@/lib/catalog';
+import {
+  buildCatalogQuery,
+  PAGE_SIZE,
+  readCatalogQuery,
+  type CatalogQuery,
+} from '@/lib/catalog-query';
 
-const PAGE_SIZE = 12;
+/**
+ * One page of results the server already fetched, handed down from `page.tsx`.
+ *
+ * `query` travels with the data so the client can tell whether the seed still
+ * describes what it is being asked to render.
+ */
+export interface InitialPage {
+  query: CatalogQuery;
+  data: ProductListResponse;
+  /** Epoch ms, so React Query can age the seed rather than trusting it. */
+  fetchedAt: number;
+}
 
 /**
  * Product listing.
@@ -33,12 +51,25 @@ const PAGE_SIZE = 12;
  * Every filter lives in the URL, so a filtered view is shareable and the back
  * button works (G1: "all URL-synced for shareable filtered views").
  */
-export function ProductsView() {
+export function ProductsView({ initialPage }: { initialPage?: InitialPage }) {
   const router = useRouter();
   const params = useSearchParams();
 
-  const query = React.useMemo(() => readQuery(params), [params]);
+  const query = React.useMemo(() => readCatalogQuery(params), [params]);
   const [mode, setMode] = React.useState<'pages' | 'infinite'>('pages');
+
+  // The server component above already fetched this exact page and rendered it
+  // into the HTML (Phase 11). Handing it to React Query as `initialData` is
+  // what stops the client from immediately re-fetching what it can already see
+  // and replacing a painted grid with a skeleton.
+  //
+  // The keys are compared rather than assumed equal: after a client-side
+  // filter change the URL moves before the new RSC payload lands, and seeding
+  // page 3 with page 1's products would show the wrong twelve items.
+  const seeded =
+    initialPage && buildCatalogQuery(initialPage.query) === buildCatalogQuery(query)
+      ? initialPage
+      : undefined;
 
   const { data: categories } = useQuery({
     queryKey: ['categories'],
@@ -48,11 +79,17 @@ export function ProductsView() {
 
   const paged = useQuery({
     queryKey: ['products', query],
-    queryFn: () => apiFetch<ProductListResponse>(`/products?${buildSearchParams(query)}`),
+    queryFn: () => apiFetch<ProductListResponse>(`/products?${buildCatalogQuery(query)}`),
     // Keeps the previous page on screen while the next one loads, so the grid
     // does not collapse to a skeleton on every filter change.
     placeholderData: keepPreviousData,
     enabled: mode === 'pages',
+    initialData: seeded?.data,
+    // Without this the seed is treated as fetched *now* and stays fresh for the
+    // full staleTime, so a page served from Next's data cache could be five
+    // minutes old and never revalidate. With it, React Query ages the seed by
+    // however long the server has been holding it and refetches when it should.
+    initialDataUpdatedAt: seeded?.fetchedAt,
   });
 
   // Infinite mode accumulates pages inside the query cache rather than in
@@ -62,7 +99,7 @@ export function ProductsView() {
     queryKey: ['products-infinite', { ...query, page: undefined }],
     queryFn: ({ pageParam }) =>
       apiFetch<ProductListResponse>(
-        `/products?${buildSearchParams({ ...query, page: pageParam })}`,
+        `/products?${buildCatalogQuery({ ...query, page: pageParam })}`,
       ),
     initialPageParam: 1,
     getNextPageParam: (lastPage) =>
@@ -71,12 +108,12 @@ export function ProductsView() {
   });
 
   const update = React.useCallback(
-    (next: Partial<QueryState>) => {
+    (next: Partial<CatalogQuery>) => {
       const merged = { ...query, ...next };
       // Any filter change returns to page 1 - page 4 of a new filter is rarely
       // where the shopper wants to land.
       if (!('page' in next)) merged.page = 1;
-      router.push(`/products?${buildSearchParams(merged)}`, { scroll: false });
+      router.push(`/products?${buildCatalogQuery(merged)}`, { scroll: false });
     },
     [query, router],
   );
@@ -101,6 +138,14 @@ export function ProductsView() {
     inStock: query.inStock,
   };
 
+  // Pull-to-refresh re-runs whichever query is driving the grid. Both are
+  // React Query's own refetch, so a failed one leaves the current page on
+  // screen rather than blanking it.
+  const refresh = React.useCallback(async () => {
+    if (mode === 'infinite') await infinite.refetch();
+    else await paged.refetch();
+  }, [infinite, mode, paged]);
+
   const sidebar = (
     <CatalogFilters
       categories={categories ?? []}
@@ -112,7 +157,7 @@ export function ProductsView() {
   );
 
   return (
-    <div className="container-bazaar py-8">
+    <PullToRefresh onRefresh={refresh} className="container-bazaar py-8">
       <header className="mb-6">
         <h1 className="font-display text-2xl font-bold tracking-tight md:text-3xl">
           {query.search ? `Results for "${query.search}"` : 'All products'}
@@ -120,7 +165,7 @@ export function ProductsView() {
         <p className="mt-1 text-sm text-muted-foreground">
           {isPending ? 'Loading…' : `${data?.meta.total ?? 0} products`}
           {data?.engine === 'postgres' && query.search ? (
-            <span className="ml-2 text-warning">
+            <span className="ml-2 text-caution">
               · search index unavailable, using database search
             </span>
           ) : null}
@@ -201,8 +246,14 @@ export function ProductsView() {
                 animate="visible"
                 className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
               >
-                {items.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+                {items.map((product, position) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    // The first row is the LCP candidate at every breakpoint -
+                    // four cards is the widest the grid ever gets.
+                    eager={position < 4}
+                  />
                 ))}
               </motion.div>
 
@@ -223,7 +274,7 @@ export function ProductsView() {
           )}
         </div>
       </div>
-    </div>
+    </PullToRefresh>
   );
 }
 
@@ -233,10 +284,10 @@ function ActiveFilterChips({
   query,
   onClear,
 }: {
-  query: QueryState;
-  onClear: (next: Partial<QueryState>) => void;
+  query: CatalogQuery;
+  onClear: (next: Partial<CatalogQuery>) => void;
 }) {
-  const chips: Array<{ label: string; clear: Partial<QueryState> }> = [];
+  const chips: Array<{ label: string; clear: Partial<CatalogQuery> }> = [];
 
   if (query.category) chips.push({ label: query.category, clear: { category: undefined } });
   if (query.brand) chips.push({ label: query.brand, clear: { brand: undefined } });
@@ -357,61 +408,4 @@ function EmptyState({ onClear }: { onClear: () => void }) {
       </Button>
     </div>
   );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  URL <-> query state                                                       */
-/* -------------------------------------------------------------------------- */
-
-interface QueryState {
-  page: number;
-  limit: number;
-  sort: string;
-  category?: string;
-  brand?: string;
-  minPrice?: number;
-  maxPrice?: number;
-  rating?: number;
-  inStock?: boolean;
-  search?: string;
-}
-
-function readQuery(params: URLSearchParams): QueryState {
-  const number = (key: string): number | undefined => {
-    const raw = params.get(key);
-    if (raw === null || raw === '') return undefined;
-    const value = Number(raw);
-    return Number.isFinite(value) ? value : undefined;
-  };
-
-  return {
-    page: number('page') ?? 1,
-    limit: number('limit') ?? PAGE_SIZE,
-    sort: params.get('sort') ?? 'newest',
-    category: params.get('category') ?? undefined,
-    brand: params.get('brand') ?? undefined,
-    minPrice: number('minPrice'),
-    maxPrice: number('maxPrice'),
-    rating: number('rating'),
-    inStock: params.get('inStock') === 'true' ? true : undefined,
-    search: params.get('search') ?? undefined,
-  };
-}
-
-function buildSearchParams(query: QueryState): string {
-  const params = new URLSearchParams();
-
-  // Only non-default values are written, so a clean listing has a clean URL.
-  if (query.page > 1) params.set('page', String(query.page));
-  if (query.limit !== PAGE_SIZE) params.set('limit', String(query.limit));
-  if (query.sort !== 'newest') params.set('sort', query.sort);
-  if (query.category) params.set('category', query.category);
-  if (query.brand) params.set('brand', query.brand);
-  if (query.minPrice !== undefined) params.set('minPrice', String(query.minPrice));
-  if (query.maxPrice !== undefined) params.set('maxPrice', String(query.maxPrice));
-  if (query.rating !== undefined) params.set('rating', String(query.rating));
-  if (query.inStock) params.set('inStock', 'true');
-  if (query.search) params.set('search', query.search);
-
-  return params.toString();
 }

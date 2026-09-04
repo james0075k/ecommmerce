@@ -9,8 +9,10 @@ design system built for sharing — scroll animations, micro-interactions, dark 
 default.
 
 This repository implements the blueprint in `../bazaar-ecommerce-blueprint.pdf` across
-12 phases. **Phases 1–3 are complete** — the foundation, the authentication and
-user-management system, and the product catalog. Phases 4–12 are outlined in the
+12 phases. **Phases 1–11 are complete** — the foundation, authentication and user
+management, the product catalog, cart and wishlist, checkout and payments, order
+management, reviews and search, the admin dashboard, the homepage and animation pass, the
+AI features, and the mobile and performance work. Phase 12 (deployment) is outlined in the
 [roadmap](#roadmap) below.
 
 ---
@@ -28,6 +30,8 @@ user-management system, and the product catalog. Phases 4–12 are outlined in t
 - [Design system](#design-system)
 - [Security model](#security-model)
 - [Payments](#payments)
+- [Orders](#orders)
+- [Mobile and performance](#mobile-and-performance)
 - [Roadmap](#roadmap)
 - [Environment variables](#environment-variables)
 - [Troubleshooting](#troubleshooting)
@@ -213,9 +217,14 @@ pnpm dev
 | Health check | http://localhost:4000/api/v1/health |
 | Prisma Studio | http://localhost:5555 (`pnpm db:studio`) |
 
-The page at `localhost:3000` is a **Phase 1 verification page**, not the storefront. It renders
-the design tokens, the type stack and the component library, and probes the API and database
-live so you can confirm the foundation is sound. Phase 9 replaces it with the real homepage.
+The page at `localhost:3000` is the storefront homepage: hero carousel, category bento, flash
+sale, trending grid, testimonials, brand marquee and newsletter. Every section fetches its own
+data and degrades on its own - if the API is down the hero, testimonials and footer still
+render, and the catalogue sections stand themselves down rather than showing an empty shelf.
+
+The app is installable as a PWA. The service worker only registers in a production build
+(`pnpm --filter @bazaar/web build && pnpm --filter @bazaar/web start`); in development it is
+deliberately unregistered so a cached dev bundle never masks an edit.
 
 ---
 
@@ -234,9 +243,16 @@ Run from the repository root.
 | `pnpm db:push` | Push `schema.prisma` to the database (no migration files) |
 | `pnpm db:migrate` | Create and apply a named migration |
 | `pnpm db:seed` | Seed store settings defaults |
+| `pnpm db:blurhash` | Derive blur-up placeholders for product images that have none |
 | `pnpm db:studio` | Open Prisma Studio |
 | `pnpm db:reset` | Drop, recreate, re-migrate and re-seed |
 | `pnpm clean` | Remove build artifacts and `node_modules` |
+
+Run from `apps/web`:
+
+| Script | What it does |
+| --- | --- |
+| `pnpm analyze` | Production build with the bundle treemaps (`ANALYZE=true`) |
 
 Use `pnpm db:push` while iterating on the schema; switch to `pnpm db:migrate` once the
 database holds data you care about.
@@ -520,6 +536,270 @@ then independently confirms via the gateway's verification API before confirming
 
 ---
 
+## Orders
+
+### Endpoints
+
+```
+GET    /orders                        page, limit, status, from, to, search,
+                                      paymentMethod - the shopper's own history
+GET    /orders/:id                    items, payment, refunds, status timeline,
+                                      tracking, delivery estimate
+POST   /orders/:id/cancel             while PENDING, CONFIRMED or PROCESSING
+GET    /orders/:id/invoice            VAT invoice PDF, served inline
+
+GET    /admin/orders                  every order, same filters + customer search
+GET    /admin/orders/export           the current filter as CSV
+GET    /admin/orders/:id
+PATCH  /admin/orders/:id/status       { status, note } - guarded by the transition map
+PATCH  /admin/orders/bulk-status      one status across a selection, per-row results
+POST   /admin/orders/:id/shipping     { trackingNumber, carrier } - notifies on save
+POST   /admin/orders/:id/refund       { amount, reason, restock } - via the gateway
+```
+
+### The status flow
+
+`ORDER_STATUS_TRANSITIONS` in `@bazaar/shared` is the single source of truth for what may
+follow what, and both ends read it: the server refuses an illegal move, and the admin dialog
+only offers the moves that are legal, so an operator is never shown a button that will fail.
+
+Two statuses are deliberately not reachable by setting them. **CANCELLED** routes through the
+same path as a shopper's own cancellation — stock returned, refund raised — because who
+pressed the button should not change whether the customer gets their money back. **REFUNDED**
+is refused outright: it is a consequence of money moving, and the money moves on the refund
+endpoint. Setting the label without moving the cash would leave the ledger lying.
+
+### What a status change sets off
+
+`OrderEventsService` owns every consequence, and it is called *after* the write commits, never
+inside the transaction. An order that is SHIPPED is shipped whether or not Resend answered, so
+every notification swallows and logs its own errors rather than failing the transition.
+
+| Transition | What happens |
+| --- | --- |
+| any | broadcast into the order's Socket.IO room |
+| SHIPPED, with a tracking number | shipping email + SMS carrying the tracking link |
+| SHIPPED, no number yet | "on its way" email; the tracking mail waits for the number |
+| DELIVERED | delivery SMS, and a review request queued for 7 days out |
+| refund | refund email + SMS with the amount; the status mail is suppressed |
+
+The review request re-checks every precondition when it runs rather than trusting them from
+when it was queued — a week is long enough for the order to have been refunded or returned,
+and asking those people for a review would be the worst mail the shop sends. Its job id is
+derived from the order id, so an order that reaches DELIVERED twice still asks once.
+
+### Real-time
+
+One Socket.IO room per **order**, not per user: a guest order has no user behind it, and its
+uuid is already the only thing guarding it. Joining is authorised exactly as reading is — a
+guest order admits anyone holding the id, a customer's order admits that customer and staff,
+nobody else — and the check runs per room on `subscribe`, so one socket cannot ride a valid
+subscription into a second order it may not see.
+
+The client re-sends its subscribe on every `connect` rather than only on mount: a socket that
+drops and comes back has forgotten its rooms, and a shopper watching a page through a tunnel
+should not silently stop receiving updates. The token is read at connect time because it
+rotates every 15 minutes; an expired one degrades the socket to guest access instead of
+dropping it mid-page.
+
+### Decisions worth knowing
+
+- **The order list expands in place.** The commonest question about an old order is "what was
+  in it", answerable from lines already paid for on that request. The detail page is for the
+  timeline and the tracking link.
+- **`to` is pushed to the end of its day.** "1 Sep to 8 Sep" means both days inclusive; a naive
+  `lte` on a midnight timestamp silently drops everything bought on the 8th, which reads to a
+  shopper as lost orders rather than as an off-by-one.
+- **Refund amounts are computed from the payment row**, clamped to captured-minus-already-
+  returned, and never read from the request. A partial refund leaves a DELIVERED order
+  delivered, because it is; only a full one flips the status.
+- **The CSV export carries the current filter** and is written with a UTF-8 BOM, without which
+  Excel renders a Nepali customer name as mojibake. Fields beginning `=`, `+`, `-` or `@` are
+  prefixed with a quote so a spreadsheet cannot execute them.
+- **Bulk updates run one transaction per order.** A hundred-row selection holds rows at
+  different statuses; one that cannot legally move must not roll back the ninety-nine that can,
+  so failures come back with reasons attached.
+
+---
+
+## Mobile and performance
+
+Phase 11. Three concerns that share one measurement: what a shopper on a mid-range phone on
+a 4G connection actually experiences.
+
+### Mobile-specific surfaces
+
+Below `lg` the storefront is a different application, not a narrower one.
+
+| Surface | Desktop | Mobile |
+| --- | --- | --- |
+| Primary navigation | Navbar + mega menu | [Bottom navigation bar](apps/web/src/components/layout/bottom-nav.tsx) |
+| Cart | Slide-out drawer | [Full page](apps/web/src/app/(shop)/cart/cart-view.tsx), swipe an item left to remove |
+| Product gallery | Hover zoom, thumbnail strip | Swipe between images, dots below |
+| Quick look at a product | Hover overlay | [Long-press → bottom sheet](apps/web/src/components/shop/quick-view-sheet.tsx) |
+| Search | Overlay over the page | Full-screen takeover, input focused on open |
+| Refresh a listing | Reload | [Pull down](apps/web/src/components/shop/pull-to-refresh.tsx) |
+| Browse departments | Mega menu | [`/categories`](apps/web/src/app/(shop)/categories/page.tsx) |
+
+The switch is by **input device**, not width: `(pointer: coarse)` and `(hover: hover)`
+rather than a breakpoint. A 1024px tablet needs 44px targets and a 700px browser window on
+a laptop does not, and only the pointer query knows the difference.
+
+Anything expressible in CSS is expressed in CSS. `useIsMobile()` returns `false` on the
+server, so a JS-gated element is absent from the first paint and appears on hydration — a
+layout shift, and at the bottom of the viewport the worst kind. It is used only where the
+*behaviour* differs (open the drawer vs. navigate to `/cart`), never to hide markup.
+
+**Touch targets** are enforced once, in [`globals.css`](apps/web/src/app/globals.css),
+rather than at ~200 call sites: under `(pointer: coarse)` every button, menu item, select
+trigger and tab gets `min-height: 44px`, and icon buttons get the width too. Checkboxes and
+switches keep their size and grow an invisible 44px hit area instead — a 44px checkbox is a
+different control.
+
+**Long-press** ([`use-long-press.ts`](apps/web/src/lib/hooks/use-long-press.ts)) abandons
+the gesture once the finger travels 10px, because a product grid is a vertical scroller
+first and a sheet that opens because someone paused mid-flick is a bug. It ignores mouse and
+pen pointers outright. **Gallery swipes** use `dragDirectionLock`: without it a
+mostly-vertical drag starting inside the frame is captured by the carousel and the page
+stops scrolling.
+
+### Performance
+
+`/products`, `/products/[slug]` and `/categories` render on the server *with data* — 48
+product cards in the HTML rather than a skeleton — through a two-layer cache:
+
+| Layer | TTL | Invalidated by |
+| --- | --- | --- |
+| Next data cache (`next: { revalidate }`) | 300s listings, 3600s category tree | Time |
+| API cache ([`CacheService`](apps/api/src/common/redis/cache.service.ts)) | Same | Any catalog write |
+
+Invalidation is by **generation counter**, not by deleting keys. An admin editing one
+product changes its price on every listing page that contains it, in every sort order, under
+every filter combination — a set nobody can enumerate. Incrementing one integer that forms
+part of every key orphans the whole namespace at once and lets the entries' own TTLs collect
+them; `SCAN`-and-delete over a namespace is O(keyspace) and blocks proportionally.
+
+Every write path invalidates: product create/update/archive/restore and bulk actions, and
+also **variant and image writes**, which change the price, the stock and the photo a cached
+listing row renders without touching the product row. Product writes drop the *category*
+namespace too, because the tree carries a product count per category. Measured locally, a
+listing goes from 54ms to 5ms once warm.
+
+Client-side:
+
+- **Images** — AVIF then WebP, `sizes` matching each grid's actual tracks, and a blur-up
+  placeholder decoded from the stored blurhash. The first row of a listing is
+  `loading="eager"` + `fetchPriority="high"` rather than `preload`: the grid is 1–4 columns
+  depending on the viewport, so which card holds the LCP element is not knowable at render
+  time, and Next's guidance is to avoid `preload` in exactly that case. The product gallery,
+  which has one candidate at every width, does use `preload`. (`priority` is the Next 15
+  spelling and is deprecated in 16.)
+- **Code splitting** — the chat widget mounts on browser idle or first interaction; Recharts,
+  Leaflet and TipTap are `next/dynamic` with matching-height skeletons.
+- **Prefetching** — [`PrefetchLink`](apps/web/src/components/shop/prefetch-link.tsx) keeps
+  Next's viewport prefetch on a coarse pointer and switches to hover/focus on a fine one. A
+  1440px listing has sixteen cards in view and the shopper will open one of them.
+- **Streaming** — `loading.tsx` per route, laid out at the size of the real thing.
+- **Immutable caching** — a year on `/_next/static`, in production only; `next dev` reuses
+  those URLs across rebuilds and an immutable header there pins the first chunk a browser saw.
+
+### The JavaScript budget — missed, and why
+
+The blueprint's J1 budget is **150KB gzipped of first-load JS**. Measured against the built
+app with `next start`, excluding the `noModule` polyfill bundle that no supported browser
+downloads:
+
+| Route | Before Phase 11 | After | Δ |
+| --- | --- | --- | --- |
+| `/` | 346 KB | 341 KB | −5 |
+| `/products` | 338 KB | 319 KB | −19 |
+| `/products/[slug]` | 339 KB | 320 KB | −19 |
+| `/cart` | 300 KB | 281 KB | −19 |
+| `/categories` | 299 KB | 280 KB | −19 |
+
+**This misses the budget and cannot meet it as the application is built.** Composition of
+the 319KB on `/products`:
+
+| | gzip |
+| --- | --- |
+| React + react-dom | 70 KB |
+| Next App Router runtime | 73 KB |
+| **Framework subtotal** | **143 KB** |
+| Radix primitives (dialog, select, sheet, dropdown, tabs, tooltip) | 104 KB |
+| framer-motion | 44 KB |
+| sonner, lucide, TanStack Query, zustand | 28 KB |
+| Application code | 11 KB |
+
+The framework alone is 143KB. 150KB would leave 7KB for the entire design system and every
+line of product code — so the target is unreachable without replacing Radix, framer-motion,
+or both, which would undo the Phase 9 design system rather than optimise it. The number is
+recorded here rather than quietly restated as met.
+
+What Phase 11 did recover, ~19KB on every storefront route:
+
+- `@bazaar/shared` and `@bazaar/ui` are marked `sideEffects: false`.
+- `@bazaar/shared` builds as four tsup entries with subpath exports, so the barrel is a set
+  of re-exports across separate chunks instead of one file. Storefront modules that need a
+  constant import `@bazaar/shared/constants` or `/enums` directly.
+- `RECOMMENDATION_REASON_LABELS` moved from `schemas/ai.ts` to `constants.ts`. It is a list
+  of five strings and a label map, and living beside the schemas meant a product card
+  importing it pulled all of Zod onto the page.
+
+Zod is now absent from every storefront route except `/`, where the newsletter form uses it
+directly and legitimately.
+
+The remaining lever is framer-motion. `LazyMotion` + `m` would save ~25KB, but the
+`domAnimation` feature bundle excludes layout animations, which the bottom-navigation
+indicator and the cart drawer both use; `domMax` saves ~6KB for the same 129-call-site
+refactor. Not worth it, and it would not reach 150KB anyway. Revisit if the animation system
+is ever reworked.
+
+`pnpm --filter @bazaar/web analyze` opens the treemaps.
+
+### Accessibility
+
+- **Skip link** first in the tab order, on all three shells (`#main` on each `<main>`).
+- **Focus management** — the quick-view sheet and the cart drawer are Radix dialogs: focus
+  moves in on open, returns to the trigger on close, Escape dismisses, the rest of the page
+  goes inert.
+- **A keyboard equivalent for every gesture** — the gallery's swipe is also ArrowLeft/Right,
+  the long-press quick view is also the product link, pull-to-refresh is also a reload.
+- **Reduced motion** — a global CSS rule collapses durations, and every animation component
+  checks `useReducedMotion()`; parallax and confetti do not run at all.
+- **Contrast (WCAG AA)** — the four status hues are designed as *fills*. As text on a light
+  page `#00C48C` is 2.26:1, `#F59E0B` is 2.15:1, `#FF6B35` is 2.84:1 and `#FF4757` is
+  3.34:1 — all under 4.5:1, across 57 call sites. Each now has a darkened partner used only
+  for text and icons — `text-ok`, `text-caution`, `text-danger`, `text-deal` — clearing
+  4.8:1 to 5.5:1 on white while the fills keep the brand hue. Dark mode already passed at
+  7:1 or better, so the tokens there only ease off the saturation. Rating stars are filled
+  with the text token too: a star is a graphic that carries meaning, and WCAG 1.4.11 asks
+  3:1 of it.
+
+### Measurement
+
+- **Lab** — [Lighthouse CI](apps/web/lighthouserc.json) on every push, mobile emulation,
+  three runs. Performance, accessibility and SEO below 0.90 fail the build, as do LCP over
+  2500ms, CLS over 0.05 and TBT over 300ms. `color-contrast` and `tap-targets` are asserted
+  individually so a regression in either cannot be averaged away by forty passing audits.
+  [LIGHTHOUSE.md](apps/web/LIGHTHOUSE.md) records what is disabled and why.
+- **Field** — [`WebVitalsProvider`](apps/web/src/components/providers/web-vitals-provider.tsx)
+  reports LCP, CLS, INP, FCP and TTFB to `POST /analytics/vitals`, one row per metric in
+  `web_vitals`. `sendBeacon`, not `fetch`: CLS and INP are only final at page hide, and a
+  fetch started during `visibilitychange` is cancelled along with the tab. Paths are
+  normalised to route patterns so a p75 is not sharded across every slug in the catalogue,
+  and the callback identity is held stable — Next replays every metric collected so far into
+  any callback it has not seen before, so an unstable one double-counts the whole page load.
+
+### Blurhash and the seed
+
+`ProductImagesService` derives a blurhash for every image uploaded through the admin panel,
+but the demo catalogue stores picsum URLs without fetching a byte — which is what keeps
+seeding fast and possible offline, and also means the placeholder silently does nothing on a
+freshly seeded database. `pnpm db:blurhash` backfills them. It is resumable, skips rows that
+already have a hash, and leaves an unfetchable image alone rather than writing null.
+
+---
+
 ## Roadmap
 
 | Phase | Scope | Status |
@@ -527,19 +807,23 @@ then independently confirms via the gateway's verification API before confirming
 | 1 | **Foundation** — monorepo, configs, shared types, Prisma schema, design system | ✅ Complete |
 | 2 | **Authentication** — email/password, Google OAuth, phone OTP, JWT + refresh, guards, profile & address book | ✅ Complete |
 | 3 | **Catalog** — categories, products, variants, images, Meilisearch sync, listing and detail pages | ✅ Complete |
-| 4 | **Cart & wishlist** — server-side cart, guest merge, slide-out drawer, price-drop alerts | ⬜ |
-| 5 | **Checkout & payments** — multi-step checkout, all gateways, webhooks, stock reservation | ⬜ |
-| 6 | **Orders** — history, tracking timeline, admin status flow, invoices, refunds | ⬜ |
-| 7 | **Reviews & search** — verified-purchase reviews, moderation, faceted search, autocomplete | ⬜ |
-| 8 | **Admin dashboard** — revenue and order analytics, product CRUD, customers, settings | ⬜ |
-| 9 | **Homepage & polish** — hero carousel, bento grid, flash sales, full animation pass | ⬜ |
-| 10 | **AI** — description generator, chatbot, recommendations, review summaries | ⬜ |
-| 11 | **Mobile & performance** — bottom nav, gestures, PWA, Lighthouse 95+ | ⬜ |
+| 4 | **Cart & wishlist** — server-side cart, guest merge, slide-out drawer, price-drop alerts | ✅ Complete |
+| 5 | **Checkout & payments** — multi-step checkout, all gateways, webhooks, stock reservation | ✅ Complete |
+| 6 | **Orders** — history, tracking timeline, admin status flow, invoices, refunds | ✅ Complete |
+| 7 | **Reviews & search** — verified-purchase reviews, moderation, faceted search, autocomplete | ✅ Complete |
+| 8 | **Admin dashboard** — revenue and order analytics, product CRUD, customers, settings | ✅ Complete |
+| 9 | **Homepage & polish** — hero carousel, bento grid, flash sales, full animation pass, PWA | ✅ Complete |
+| 10 | **AI** — description generator, chatbot, recommendations, review summaries | ✅ Complete |
+| 11 | **Mobile & performance** — bottom nav, gestures, caching, a11y, Lighthouse CI | ✅ Complete |
 | 12 | **Deployment** — Vercel + Railway, CI/CD, monitoring, CSP, launch checklist | ⬜ |
 
 Rules that hold for every phase: TypeScript strict with no `any`; Zod validation on every
 input; Prisma for all database access; mobile-first CSS from 375px up; commit at the end of
 each phase as `Phase X: [title] complete`.
+
+Phase 11 met every functional and accessibility requirement and **missed the 150KB
+first-load JavaScript budget**; the measurement and the reason are in
+[Mobile and performance](#mobile-and-performance).
 
 ---
 

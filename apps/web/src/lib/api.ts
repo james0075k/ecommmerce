@@ -125,6 +125,50 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   return (await response.json()) as T;
 }
 
+/* -------------------------------------------------------------------------- */
+/*  File downloads                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Fetches a file endpoint and hands the result to the browser as a download.
+ *
+ * A plain `<a href>` cannot be used for anything behind an admin role: the
+ * access token lives in memory rather than a cookie (D1), so a bare navigation
+ * arrives unauthenticated. This sends the header, then saves the body through a
+ * blob URL - which is revoked immediately afterwards, since a leaked one keeps
+ * the whole file alive in memory for the life of the tab.
+ */
+export async function apiDownload(path: string, filename: string): Promise<void> {
+  const send = async (token: string | null): Promise<Response> =>
+    fetch(`${API_URL}${path}`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+  let response = await send(accessToken);
+
+  if (response.status === 401) {
+    const token = await refreshAccessToken();
+    if (token) response = await send(token);
+  }
+
+  if (!response.ok) throw await toApiError(response);
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+
+  try {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 async function toApiError(response: Response): Promise<ApiError> {
   let message = `Request failed (${response.status})`;
   let fieldErrors: ApiFieldError[] = [];

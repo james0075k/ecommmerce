@@ -211,7 +211,7 @@ function PreviewPanel({ preview }: { preview: Preview }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-3 text-sm">
-        <span className="flex items-center gap-1.5 text-success">
+        <span className="flex items-center gap-1.5 text-ok">
           <CheckCircle2 className="size-4" />
           {preview.willImport} ready
         </span>
@@ -279,9 +279,9 @@ function ImportSummary({ result }: { result: BulkImportResult }) {
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Created', value: result.created, tone: 'text-success' },
+          { label: 'Created', value: result.created, tone: 'text-ok' },
           { label: 'Updated', value: result.updated, tone: '' },
-          { label: 'Skipped', value: result.skipped, tone: 'text-warning' },
+          { label: 'Skipped', value: result.skipped, tone: 'text-caution' },
         ].map((stat) => (
           <div key={stat.label} className="rounded-md border border-border p-3 text-center">
             <p className={cn('numeric text-2xl font-semibold', stat.tone)}>{stat.value}</p>

@@ -127,3 +127,132 @@
     animation: none !important;
   }
 }
+
+/* -------------------------------------------------------------------------
+   Phase 9 additions
+   ------------------------------------------------------------------------- */
+
+/* Marquee - the track holds two copies of the list and travels exactly one
+   copy's width plus the flex gap, so the seam is invisible and the loop is
+   continuous. The two variants differ only in the gap they compensate for. -- */
+@keyframes bz-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-100% - 1rem)); /* gap-4 */
+  }
+}
+
+@keyframes bz-marquee-wide {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-100% - 2.5rem)); /* gap-10 */
+  }
+}
+
+/* Kinetic headline - each glyph flips up into place, staggered by an inline
+   animation-delay. CSS rather than Framer Motion on purpose: a headline is 30
+   or so letters, and 30 motion components is 30 more things for React to
+   hydrate on the critical path for an effect that needs no orchestration. -- */
+@keyframes bz-letter-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.55em) rotateX(-70deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.bz-letter {
+  display: inline-block;
+  animation: bz-letter-in 500ms var(--bz-ease-out-expo) both;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bz-letter {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Form focus - the ring grows out of the border rather than appearing at full
+   width, which is what makes it read as the field responding. ------------- */
+@keyframes bz-focus-glow {
+  from {
+    box-shadow: 0 0 0 0 var(--bz-glow-color);
+  }
+  to {
+    box-shadow: 0 0 0 4px var(--bz-glow-color);
+  }
+}
+
+.bz-focus-glow {
+  --bz-glow-color: color-mix(in srgb, var(--ring) 34%, transparent);
+}
+
+.bz-focus-glow[aria-invalid='true'] {
+  --bz-glow-color: color-mix(in srgb, var(--destructive) 38%, transparent);
+}
+
+.bz-focus-glow:focus-visible {
+  animation: bz-focus-glow 240ms var(--bz-ease-out-expo) forwards;
+}
+
+/* Toast progress - a bar draining across the bottom of the toast for exactly
+   as long as it will stay up. Hovering the stack pauses Sonner's timer, so the
+   bar has to pause with it or it would lie about the time left. ----------- */
+@keyframes bz-toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.cn-toast {
+  position: relative;
+  overflow: hidden;
+}
+
+.cn-toast::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  transform-origin: left;
+  background-color: color-mix(in srgb, currentColor 45%, transparent);
+  animation: bz-toast-progress var(--bz-toast-duration, 4s) linear forwards;
+}
+
+/* A loading toast has no duration to count down, and a toast being dismissed
+   should not animate its own bar out. */
+.cn-toast[data-type='loading']::after,
+.cn-toast[data-removed='true']::after {
+  display: none;
+}
+
+[data-sonner-toaster]:hover .cn-toast::after {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bz-focus-glow:focus-visible,
+  .cn-toast::after {
+    animation: none !important;
+  }
+
+  /* The progress bar carries information - how long is left - so rather than
+     removing it, it is pinned full-width. */
+  .cn-toast::after {
+    transform: scaleX(1);
+  }
+}

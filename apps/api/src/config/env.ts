@@ -20,6 +20,12 @@ export const envSchema = z.object({
   MEILI_HOST: z.string().url().optional(),
   MEILI_MASTER_KEY: z.string().optional(),
 
+  // AI is optional infrastructure: without a key the /ai routes answer 503 and
+  // the rest of the store carries on. Failing to boot over a feature that only
+  // writes marketing copy would be the wrong trade.
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-6'),
+
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),

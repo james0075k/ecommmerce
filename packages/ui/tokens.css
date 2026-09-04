@@ -22,6 +22,21 @@
   --bz-error: #ff4757; /* errors, out-of-stock, delete actions       */
   --bz-warning: #f59e0b; /* low stock, flash sale, rating stars        */
 
+  /* --- Status colours as *text* (Phase 11, WCAG AA) ------------------------
+     The four status hues above are chosen to be legible as fills with black or
+     white on top of them. As text on a near-white page they are nowhere near
+     AA: #00C48C is 2.26:1 on white, #F59E0B is 2.15:1, #FF6B35 is 2.84:1 and
+     #FF4757 is 3.34:1 - all of them well under the 4.5:1 floor.
+
+     So each one gets a darkened partner used only for text and icons. The fills
+     keep the brand hue; the words on the page keep their contrast. In dark mode
+     the originals are already 7:1 or better against the surfaces, so the text
+     tokens there stay bright and only ease off the saturation. */
+  --bz-success-text: #047857; /* 5.48:1 on white  */
+  --bz-warning-text: #b45309; /* 5.02:1 on white  */
+  --bz-error-text: #dc2626; /* 4.83:1 on white  */
+  --bz-sale-text: #c2410c; /* 5.18:1 on white  */
+
   /* --- Surfaces (light) --------------------------------------------------- */
   --bz-bg: #fafbfc;
   --bz-surface: #ffffff;
@@ -65,6 +80,9 @@
 
   --primary: var(--bz-primary);
   --primary-foreground: #ffffff;
+  /* The fill behind white text. Identical to --primary in light mode; the two
+     part company in dark, where one value cannot serve both jobs. */
+  --primary-solid: var(--bz-primary);
 
   --secondary: var(--bz-surface-2);
   --secondary-foreground: var(--bz-text);
@@ -111,6 +129,13 @@
   --bz-border: #262d45;
 
   --bz-primary-soft: #221a3d;
+
+  /* Against #161B2E these read at 8.9:1, 10.2:1, 7.6:1 and 7.5:1. */
+  --bz-success-text: #34d399;
+  --bz-warning-text: #fbbf24;
+  --bz-error-text: #ff8a94;
+  --bz-sale-text: #fb923c;
+
   --bz-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
   --bz-shadow-lg: 0 20px 60px rgba(108, 60, 225, 0.25);
 
@@ -128,6 +153,11 @@
 
   --primary: #8b5cf6; /* lifted for AA contrast on #0B0E1A */
   --primary-foreground: #ffffff;
+  /* Darker than --primary on purpose. #8B5CF6 is light enough to read as text
+     on the near-black background (4.5:1) but too light to carry white text on
+     top of it (4.2:1) - no single purple does both, so buttons and badges use
+     this one and text keeps --primary. */
+  --primary-solid: #7c3aed;
 
   --secondary: var(--bz-surface-2);
   --secondary-foreground: var(--bz-text);

@@ -35,6 +35,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import type { AuthenticatedUser } from '../common/types/authenticated-user';
+import { readCartSession } from '../cart/cart-session';
 import { AuthService } from './auth.service';
 import type { AuthResult, PublicUserView } from './auth.service';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
@@ -215,9 +216,17 @@ function readRefreshCookie(request: Request): string | undefined {
   return cookies?.[REFRESH_COOKIE];
 }
 
-function contextOf(request: Request): { ip?: string; userAgent?: string } {
+function contextOf(request: Request): {
+  ip?: string;
+  userAgent?: string;
+  cartSessionId?: string;
+} {
   return {
     ip: request.ip,
     userAgent: request.get('user-agent') ?? undefined,
+    // Read on every login path so AuthService can merge the guest cart. The
+    // cookie itself is left in place: the merge empties the rows it points at,
+    // and clearing it here would strand a cart if the merge failed.
+    cartSessionId: readCartSession(request),
   };
 }

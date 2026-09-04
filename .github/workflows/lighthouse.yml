@@ -1,0 +1,102 @@
+name: Lighthouse CI
+
+# Phase 11's performance and accessibility budgets, enforced rather than
+# monitored: the assertions in apps/web/lighthouserc.json fail the job.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: lighthouse-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      # The storefront renders an empty catalogue when the API is unreachable,
+      # and an empty page scores beautifully. The audit is only meaningful with
+      # real data behind it, so Postgres runs here and the API runs against it.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bazaar
+          POSTGRES_PASSWORD: bazaar_dev_password
+          POSTGRES_DB: bazaar
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://bazaar:bazaar_dev_password@localhost:5432/bazaar?schema=public
+      REDIS_URL: redis://localhost:6379
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      # Not a secret: this job never issues a token anyone can use off the
+      # runner, and the workflow must run on forks where secrets are withheld.
+      NEXTAUTH_SECRET: lighthouse-ci-not-a-real-secret
+      JWT_SECRET: lighthouse-ci-not-a-real-secret
+      JWT_REFRESH_SECRET: lighthouse-ci-not-a-real-secret-either
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Create the schema and seed the catalogue
+        run: |
+          pnpm db:push
+          pnpm db:seed
+
+      - name: Build
+        run: pnpm build 2>&1 | tee build.log
+
+      # Reprinted on its own so a bundle regression is visible when comparing
+      # two runs, rather than buried in a thousand lines of build output.
+      # Lighthouse scores the symptom; this is the cause, and the 150KB
+      # first-load budget is read from here.
+      - name: First-load JavaScript
+        if: always()
+        run: |
+          echo "::group::next build route summary"
+          sed -n '/Route (app)/,/^$/p' build.log || true
+          echo "::endgroup::"
+
+      - name: Start the API
+        run: |
+          pnpm --filter @bazaar/api start:prod &
+          npx wait-on http://localhost:4000/api/v1/health --timeout 120000
+
+      - name: Lighthouse
+        run: pnpm dlx @lhci/cli@0.14.x autorun --config=apps/web/lighthouserc.json
+
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci
+          retention-days: 14

@@ -4,6 +4,7 @@ import { encode } from 'blurhash';
 import sharp from 'sharp';
 import type { AttachImageInput } from '@bazaar/shared';
 
+import { CacheService } from '../common/redis/cache.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Blurhash components. 4x3 is the usual sweet spot for product photography. */
@@ -17,7 +18,15 @@ const FETCH_TIMEOUT_MS = 8000;
 export class ProductImagesService {
   private readonly logger = new Logger(ProductImagesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
+
+  /** The primary image is part of every cached listing row. */
+  private async invalidateListings(): Promise<void> {
+    await this.cache.invalidate('products');
+  }
 
   async list(productId: string): Promise<ProductImage[]> {
     return this.prisma.productImage.findMany({
@@ -39,7 +48,7 @@ export class ProductImagesService {
 
     const metadata = await this.deriveMetadata(dto.url);
 
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       if (dto.isPrimary) {
         await tx.productImage.updateMany({ where: { productId }, data: { isPrimary: false } });
       }
@@ -58,18 +67,24 @@ export class ProductImagesService {
         },
       });
     });
+
+    await this.invalidateListings();
+    return created;
   }
 
   async setPrimary(imageId: string): Promise<ProductImage> {
     const image = await this.assertExists(imageId);
 
-    return this.prisma.$transaction(async (tx) => {
+    const primary = await this.prisma.$transaction(async (tx) => {
       await tx.productImage.updateMany({
         where: { productId: image.productId },
         data: { isPrimary: false },
       });
       return tx.productImage.update({ where: { id: imageId }, data: { isPrimary: true } });
     });
+
+    await this.invalidateListings();
+    return primary;
   }
 
   async reorder(productId: string, orderedIds: string[]): Promise<ProductImage[]> {
@@ -84,6 +99,9 @@ export class ProductImagesService {
       ),
     );
 
+    // Reordering can promote a different photo into the grid's one visible
+    // slot, so the cached rows are wrong until this runs.
+    await this.invalidateListings();
     return this.list(productId);
   }
 
@@ -105,6 +123,7 @@ export class ProductImagesService {
       }
     });
 
+    await this.invalidateListings();
     return { message: 'Image removed.' };
   }
 

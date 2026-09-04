@@ -30,7 +30,7 @@ export function EditProductView({ productId }: { productId: string }) {
 
   if (isPending) {
     return (
-      <div className="container-bazaar flex items-center gap-2 py-20 text-muted-foreground">
+      <div className="flex items-center gap-2 py-20 text-muted-foreground">
         <Loader2 className="size-5 animate-spin" />
         Loading product…
       </div>
@@ -39,7 +39,7 @@ export function EditProductView({ productId }: { productId: string }) {
 
   if (isError || !data) {
     return (
-      <div className="container-bazaar py-20 text-center text-muted-foreground">
+      <div className="py-20 text-center text-muted-foreground">
         Could not load that product.
       </div>
     );

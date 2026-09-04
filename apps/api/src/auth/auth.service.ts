@@ -24,6 +24,7 @@ import type {
 
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
+import { CartService } from '../cart/cart.service';
 import { MailService } from '../notifications/mail.service';
 import { SmsService } from '../notifications/sms.service';
 import { generateOpaqueToken, hashToken, TokenService } from './token.service';
@@ -50,6 +51,8 @@ export interface PublicUserView {
 interface RequestContext {
   ip?: string;
   userAgent?: string;
+  /** The `bz_cart` guest session, so the cart survives signing in (C1.4). */
+  cartSessionId?: string;
 }
 
 /** D4: 5 failed logins in 15 minutes locks the account out. */
@@ -85,6 +88,7 @@ export class AuthService {
     private readonly mail: MailService,
     private readonly sms: SmsService,
     private readonly config: ConfigService,
+    private readonly cart: CartService,
   ) {}
 
   /* ---------------------------------------------------------------------- */
@@ -118,6 +122,10 @@ export class AuthService {
     });
 
     await this.sendVerificationEmail(user);
+
+    // Registering is the other way a guest cart finds an owner: someone fills a
+    // cart, then creates an account to check out.
+    await this.cart.mergeGuestCart(user.id, ctx.cartSessionId);
 
     const issued = await this.tokens.issueTokens(user, ctx);
     this.tokens.setRefreshCookie(response, issued.refreshToken);
@@ -453,6 +461,12 @@ export class AuthService {
   ): Promise<AuthResult> {
     const issued = await this.tokens.issueTokens(user, ctx);
     this.tokens.setRefreshCookie(response, issued.refreshToken);
+
+    // Every path into a session funnels through here - password, OTP and
+    // Google alike - so the guest cart is merged in exactly one place.
+    // `mergeGuestCart` swallows its own errors: a cart problem must never cost
+    // someone their login.
+    await this.cart.mergeGuestCart(user.id, ctx.cartSessionId);
 
     await this.prisma.user.update({
       where: { id: user.id },

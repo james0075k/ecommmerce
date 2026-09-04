@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { Currency, OrderStatus, PaymentMethod, PaymentStatus, RefundStatus } from '../enums.js';
+import { CARRIER_IDS, SHIPPING_METHOD_IDS } from '../constants.js';
 import { jsonSchema, paginationSchema, priceSchema, uuidSchema } from './common.js';
 import { addressInputSchema } from './user.js';
 
@@ -55,19 +56,46 @@ export const orderSchema = z.object({
 
 export type Order = z.infer<typeof orderSchema>;
 
-/** Payload for POST /orders/checkout. Totals are always recomputed server-side (D2). */
-export const checkoutInputSchema = z.object({
-  shippingAddressId: uuidSchema.optional(),
-  shippingAddress: addressInputSchema.optional(),
-  billingAddressId: uuidSchema.optional(),
-  billingAddress: addressInputSchema.optional(),
-  guestEmail: z.string().email().optional(),
-  paymentMethod: z.nativeEnum(PaymentMethod),
-  couponCode: z.string().max(40).optional(),
-  notes: z.string().max(1000).optional(),
-});
+/**
+ * Payload for POST /orders/checkout.
+ *
+ * D2: no money crosses this boundary. The client sends *what* to buy and
+ * *where* to send it; every figure on the resulting order - line prices,
+ * shipping, tax, discount, total - is recomputed from the database. A client
+ * that submits a price is submitting something the server ignores.
+ */
+export const checkoutInputSchema = z
+  .object({
+    shippingAddressId: uuidSchema.optional(),
+    shippingAddress: addressInputSchema.optional(),
+    billingAddressId: uuidSchema.optional(),
+    billingAddress: addressInputSchema.optional(),
+    guestEmail: z.string().email('Enter a valid email address').optional(),
+    paymentMethod: z.nativeEnum(PaymentMethod),
+    shippingMethod: z.enum(SHIPPING_METHOD_IDS).default('STANDARD'),
+    couponCode: z.string().max(40).optional(),
+    notes: z.string().max(1000).optional(),
+  })
+  .refine((value) => value.shippingAddressId || value.shippingAddress, {
+    message: 'Choose a saved address or enter a new one',
+    path: ['shippingAddress'],
+  });
 
 export type CheckoutInput = z.infer<typeof checkoutInputSchema>;
+
+/** Payload for POST /orders/:id/cancel. */
+export const cancelOrderSchema = z.object({
+  reason: z.string().min(3, 'Tell us why you are cancelling').max(500),
+});
+
+export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;
+
+/** Query for the shipping-rate quote shown in checkout step 2. */
+export const shippingQuoteSchema = z.object({
+  district: z.string().min(2).max(60),
+});
+
+export type ShippingQuoteInput = z.infer<typeof shippingQuoteSchema>;
 
 export const updateOrderStatusSchema = z.object({
   status: z.nativeEnum(OrderStatus),
@@ -140,3 +168,61 @@ export const createRefundSchema = z.object({
 });
 
 export type CreateRefundInput = z.infer<typeof createRefundSchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  Admin order management (Phase 6)                                          */
+/* -------------------------------------------------------------------------- */
+
+/** Query for GET /admin/orders - the shopper's own list uses `orderQuerySchema`. */
+export const adminOrderQuerySchema = orderQuerySchema.extend({
+  paymentStatus: z.nativeEnum(PaymentStatus).optional(),
+  userId: uuidSchema.optional(),
+  /** Orders whose tracking number is still blank - the "to dispatch" worklist. */
+  awaitingShipment: z.coerce.boolean().optional(),
+  sort: z.enum(['newest', 'oldest', 'total_high', 'total_low']).default('newest'),
+});
+
+export type AdminOrderQueryInput = z.infer<typeof adminOrderQuerySchema>;
+
+/**
+ * Payload for POST /admin/orders/:id/shipping.
+ *
+ * Carrier is validated against the known list rather than left free text: the
+ * tracking link the shopper is shown is built by looking the carrier up, and an
+ * unrecognised one would silently degrade to an unlinked number.
+ */
+export const orderShippingSchema = z.object({
+  trackingNumber: z.string().min(3, 'Enter the consignment number').max(120),
+  carrier: z.enum(CARRIER_IDS),
+  note: z.string().max(500).optional(),
+  /** False to record the consignment without moving the order to SHIPPED. */
+  markShipped: z.boolean().default(true),
+});
+
+export type OrderShippingInput = z.infer<typeof orderShippingSchema>;
+
+/**
+ * Payload for POST /admin/orders/:id/refund.
+ *
+ * `amount` is optional and defaults to the full captured amount server-side -
+ * a client that omits it gets the whole order back, and one that sends more
+ * than was captured is rejected there, not here (only the server knows the
+ * figure).
+ */
+export const adminRefundSchema = z.object({
+  amount: priceSchema.positive('A refund must be for more than zero').optional(),
+  reason: z.string().min(3, 'A refund reason is required').max(500),
+  /** Put the items back in stock. Off for a goodwill refund on a kept order. */
+  restock: z.boolean().default(false),
+});
+
+export type AdminRefundInput = z.infer<typeof adminRefundSchema>;
+
+/** Payload for PATCH /admin/orders/bulk-status. */
+export const bulkOrderStatusSchema = z.object({
+  orderIds: z.array(uuidSchema).min(1, 'Select at least one order').max(100),
+  status: z.nativeEnum(OrderStatus),
+  note: z.string().max(500).optional(),
+});
+
+export type BulkOrderStatusInput = z.infer<typeof bulkOrderStatusSchema>;

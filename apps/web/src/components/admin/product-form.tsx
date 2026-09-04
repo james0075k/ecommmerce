@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, Plus, Trash2, Wand2, X } from 'lucide-react';
@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 
 import { slugify } from '@bazaar/ui';
 
-import { RichTextEditor } from '@/components/admin/rich-text-editor';
+import { ImageUploader, type ImageDraft } from '@/components/admin/image-uploader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,11 +22,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError, apiFetch } from '@/lib/api';
 import type { CategoryNode, ProductDetail } from '@/lib/catalog';
-import { cn } from '@/lib/utils';
+
+/**
+ * TipTap plus ProseMirror is the heaviest thing the admin panel loads, and it
+ * serves one field on one form (Phase 11). Splitting it out keeps it off the
+ * product *list*, which shares a route chunk with this form's page, and lets
+ * the rest of the form paint while the editor is still arriving.
+ *
+ * `ssr: false` because ProseMirror builds its document against a real DOM;
+ * there is nothing useful to render on the server. The skeleton matches the
+ * editor's own height so the form does not reflow when it lands.
+ */
+const RichTextEditor = dynamic(
+  () => import('@/components/admin/rich-text-editor').then((mod) => mod.RichTextEditor),
+  { ssr: false, loading: () => <Skeleton className="h-64 w-full rounded-md" /> },
+);
 
 interface VariantDraft {
   id?: string;
@@ -36,13 +51,6 @@ interface VariantDraft {
   stockQuantity: number;
   attributes: Record<string, string>;
   isActive: boolean;
-}
-
-interface ImageDraft {
-  url: string;
-  altText: string | null;
-  isPrimary: boolean;
-  sortOrder: number;
 }
 
 export function ProductForm({ product }: { product?: ProductDetail }) {
@@ -81,7 +89,6 @@ export function ProductForm({ product }: { product?: ProductDetail }) {
       sortOrder: index,
     })) ?? [],
   );
-  const [imageDraft, setImageDraft] = React.useState('');
 
   const [variants, setVariants] = React.useState<VariantDraft[]>(
     product?.variants.map((variant) => ({
@@ -162,7 +169,7 @@ export function ProductForm({ product }: { product?: ProductDetail }) {
   };
 
   return (
-    <div className="container-bazaar py-8">
+    <div className="mx-auto w-full max-w-[1600px]">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight">
@@ -231,12 +238,18 @@ export function ProductForm({ product }: { product?: ProductDetail }) {
             </CardContent>
           </Card>
 
-          <ImagesCard
-            images={images}
-            setImages={setImages}
-            draft={imageDraft}
-            setDraft={setImageDraft}
-          />
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-display">Images</CardTitle>
+              <CardDescription>
+                Drag files in to upload, drag tiles to reorder. The first is the primary one;
+                blurhash is generated server-side on save.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ImageUploader images={images} onChange={setImages} />
+            </CardContent>
+          </Card>
 
           <VariantsCard variants={variants} setVariants={setVariants} baseSku={sku} />
         </div>
@@ -376,118 +389,6 @@ export function ProductForm({ product }: { product?: ProductDetail }) {
 
 /* -------------------------------------------------------------------------- */
 
-function ImagesCard({
-  images,
-  setImages,
-  draft,
-  setDraft,
-}: {
-  images: ImageDraft[];
-  setImages: (next: ImageDraft[]) => void;
-  draft: string;
-  setDraft: (value: string) => void;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="font-display">Images</CardTitle>
-        <CardDescription>
-          The first image is the primary one. Blurhash is generated server-side on save.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex gap-2">
-          <Input
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="https://…/image.jpg"
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter') return;
-              event.preventDefault();
-              if (!draft.trim()) return;
-              setImages([
-                ...images,
-                {
-                  url: draft.trim(),
-                  altText: null,
-                  isPrimary: images.length === 0,
-                  sortOrder: images.length,
-                },
-              ]);
-              setDraft('');
-            }}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              if (!draft.trim()) return;
-              setImages([
-                ...images,
-                {
-                  url: draft.trim(),
-                  altText: null,
-                  isPrimary: images.length === 0,
-                  sortOrder: images.length,
-                },
-              ]);
-              setDraft('');
-            }}
-          >
-            <Plus className="size-4" />
-            Add
-          </Button>
-        </div>
-
-        {images.length > 0 ? (
-          <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-            {images.map((image, index) => (
-              <li key={`${image.url}-${index}`} className="group relative">
-                <div
-                  className={cn(
-                    'relative aspect-square overflow-hidden rounded-md border-2',
-                    image.isPrimary ? 'border-primary' : 'border-border',
-                  )}
-                >
-                  <Image src={image.url} alt="" fill sizes="160px" className="object-cover" />
-                </div>
-
-                <div className="mt-1.5 flex items-center justify-between gap-1">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setImages(
-                        images.map((entry, position) => ({
-                          ...entry,
-                          isPrimary: position === index,
-                        })),
-                      )
-                    }
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    {image.isPrimary ? 'Primary' : 'Make primary'}
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Remove image"
-                    onClick={() => setImages(images.filter((_, position) => position !== index))}
-                  >
-                    <Trash2 className="size-3.5 text-destructive" />
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="rounded-md border border-dashed border-border py-6 text-center text-sm text-muted-foreground">
-            No images yet.
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 /* -------------------------------------------------------------------------- */
 
 /** Variant matrix builder: define option sets, generate every combination. */
@@ -604,7 +505,7 @@ function VariantsCard({
         ) : null}
 
         {!baseSku ? (
-          <p className="text-xs text-warning">Set the product SKU first — variant SKUs derive from it.</p>
+          <p className="text-xs text-caution">Set the product SKU first — variant SKUs derive from it.</p>
         ) : null}
 
         {variants.length > 0 ? (

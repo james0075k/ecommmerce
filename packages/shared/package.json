@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "license": "UNLICENSED",
+  "sideEffects": false,
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -16,6 +17,46 @@
       "require": {
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
+      }
+    },
+    "./constants": {
+      "import": {
+        "types": "./dist/constants.d.ts",
+        "default": "./dist/constants.js"
+      },
+      "require": {
+        "types": "./dist/constants.d.cts",
+        "default": "./dist/constants.cjs"
+      }
+    },
+    "./enums": {
+      "import": {
+        "types": "./dist/enums.d.ts",
+        "default": "./dist/enums.js"
+      },
+      "require": {
+        "types": "./dist/enums.d.cts",
+        "default": "./dist/enums.cjs"
+      }
+    },
+    "./schemas": {
+      "import": {
+        "types": "./dist/schemas/index.d.ts",
+        "default": "./dist/schemas/index.js"
+      },
+      "require": {
+        "types": "./dist/schemas/index.d.cts",
+        "default": "./dist/schemas/index.cjs"
+      }
+    },
+    "./types": {
+      "import": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/types/index.js"
+      },
+      "require": {
+        "types": "./dist/types/index.d.cts",
+        "default": "./dist/types/index.cjs"
       }
     }
   },

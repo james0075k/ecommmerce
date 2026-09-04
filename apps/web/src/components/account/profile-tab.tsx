@@ -153,7 +153,7 @@ function VerifiedBadge({ verified }: { verified: boolean }) {
       Verified
     </Badge>
   ) : (
-    <Badge variant="outline" className="text-warning">
+    <Badge variant="outline" className="text-caution">
       Not verified
     </Badge>
   );

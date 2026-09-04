@@ -2,10 +2,8 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { LogOut, MapPin, ShieldCheck, User } from 'lucide-react';
+import { MapPin, ShieldCheck, User } from 'lucide-react';
 
-import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { AddressesTab } from '@/components/account/addresses-tab';
 import { ProfileTab } from '@/components/account/profile-tab';
 import { SecurityTab } from '@/components/account/security-tab';
@@ -29,11 +27,9 @@ type TabId = (typeof TABS)[number]['id'];
  * covers the moment before the refresh cookie is exchanged for a session.
  */
 export function AccountView() {
-  const router = useRouter();
   const [tab, setTab] = React.useState<TabId>('profile');
   const user = useAuthStore((state) => state.user);
   const ready = useAuthStore((state) => state.ready);
-  const logout = useAuthStore((state) => state.logout);
 
   if (!ready) return <AccountSkeleton />;
 
@@ -49,31 +45,9 @@ export function AccountView() {
   }
 
   return (
-    <div className="min-h-dvh bg-background">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="container-bazaar flex h-14 items-center justify-between gap-4">
-          <Link href="/" className="font-display text-lg font-extrabold tracking-tight">
-            Bazaar
-          </Link>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                await logout();
-                router.push('/login');
-                router.refresh();
-              }}
-            >
-              <LogOut className="size-4" />
-              <span className="hidden sm:inline">Log out</span>
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <main className="container-bazaar py-8 pb-24 md:pb-12">
+    // Header, theme toggle and log-out now come from the (shop) layout.
+    <div>
+      <div className="container-bazaar py-8 pb-24 md:pb-12">
         <div className="mb-8">
           <h1 className="font-display text-2xl font-bold tracking-tight">Your account</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -112,7 +86,7 @@ export function AccountView() {
             {tab === 'security' ? <SecurityTab /> : null}
           </div>
         </div>
-      </main>
+      </div>
 
       {/* Mobile tab bar - fixed so the active section is always one tap away. */}
       <nav

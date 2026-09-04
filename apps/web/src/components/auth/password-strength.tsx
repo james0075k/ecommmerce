@@ -77,7 +77,7 @@ export function PasswordStrength({ password }: { password: string }) {
       <p
         className={cn(
           'text-xs',
-          level === 'strong' ? 'text-success' : 'text-muted-foreground',
+          level === 'strong' ? 'text-ok' : 'text-muted-foreground',
         )}
         // Announced politely so a screen reader hears the assessment change
         // without interrupting typing.

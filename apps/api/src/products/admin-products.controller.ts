@@ -4,6 +4,8 @@ import {
   Delete,
   Get,
   Header,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -12,11 +14,12 @@ import {
 } from '@nestjs/common';
 import type { Product, ProductImage, ProductVariant } from '@prisma/client';
 import {
+  adminProductQuerySchema,
   adminProductSchema,
   adminProductUpdateSchema,
   attachImageSchema,
+  bulkProductActionSchema,
   imageUploadRequestSchema,
-  productQuerySchema,
   stockAdjustmentSchema,
   UserRole,
   variantInputSchema,
@@ -24,11 +27,15 @@ import {
 } from '@bazaar/shared';
 import type {
   AdminProductInput,
+  AdminProductQueryInput,
+  AdminProductRow,
   AdminProductUpdateInput,
   AttachImageInput,
   BulkImportResult,
+  BulkProductActionInput,
+  BulkProductResult,
   ImageUploadRequest,
-  ProductQueryInput,
+  Paginated,
   StockAdjustmentInput,
   VariantInput,
   VariantUpdateInput,
@@ -39,6 +46,7 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { UploadService } from '../upload/upload.service';
 import type { PresignedUpload } from '../upload/upload.service';
 import { BulkImportService } from './bulk-import.service';
+import { AdminProductsService } from './admin-products.service';
 import { ProductImagesService } from './product-images.service';
 import { ProductsService } from './products.service';
 import { VariantsService } from './variants.service';
@@ -49,6 +57,7 @@ import { VariantsService } from './variants.service';
 export class AdminProductsController {
   constructor(
     private readonly products: ProductsService,
+    private readonly admin: AdminProductsService,
     private readonly variants: VariantsService,
     private readonly images: ProductImagesService,
     private readonly bulkImport: BulkImportService,
@@ -57,9 +66,33 @@ export class AdminProductsController {
 
   /* --- Products ---------------------------------------------------------- */
 
+  /**
+   * The admin catalog table.
+   *
+   * `adminProductQuerySchema`, not the storefront's - that one hardcodes
+   * "active and not deleted", which hides exactly the drafts and archived rows
+   * this table exists to manage (Phase 8).
+   */
   @Get()
-  list(@Query(new ZodValidationPipe(productQuerySchema)) query: ProductQueryInput) {
-    return this.products.list(query);
+  list(
+    @Query(new ZodValidationPipe(adminProductQuerySchema)) query: AdminProductQueryInput,
+  ): Promise<Paginated<AdminProductRow>> {
+    return this.admin.list(query);
+  }
+
+  /** Declared before any `:id` route so "brands" is not read as a product id. */
+  @Get('brands')
+  brands(): Promise<string[]> {
+    return this.admin.brands();
+  }
+
+  /** One action across a selection. Partial success is reported, not thrown. */
+  @Patch('bulk')
+  @HttpCode(HttpStatus.OK)
+  bulk(
+    @Body(new ZodValidationPipe(bulkProductActionSchema)) dto: BulkProductActionInput,
+  ): Promise<BulkProductResult> {
+    return this.admin.bulkAction(dto);
   }
 
   @Post()

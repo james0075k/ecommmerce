@@ -64,7 +64,7 @@ export default function ForgotPasswordPage() {
         }
       >
         <div className="flex items-start gap-3 rounded-md border border-border bg-muted/40 p-4">
-          <MailCheck className="mt-0.5 size-5 shrink-0 text-success" aria-hidden />
+          <MailCheck className="mt-0.5 size-5 shrink-0 text-ok" aria-hidden />
           <p className="text-sm text-muted-foreground">
             Nothing after a few minutes? Check your spam folder, then{' '}
             <button

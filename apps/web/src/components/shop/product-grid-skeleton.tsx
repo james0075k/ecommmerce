@@ -1,9 +1,22 @@
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 /** Matches the real grid's shape so the swap does not shift layout (J1: CLS < 0.05). */
-export function ProductGridSkeleton({ count = 12 }: { count?: number }) {
+export function ProductGridSkeleton({
+  count = 12,
+  className,
+}: {
+  count?: number;
+  /** Overrides the column track when the grid it stands in for differs. */
+  className?: string;
+}) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div
+      className={cn(
+        'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+        className,
+      )}
+    >
       {Array.from({ length: count }, (_, index) => (
         <div key={index} className="overflow-hidden rounded-md border border-border bg-card">
           <Skeleton className="bz-shimmer aspect-square w-full rounded-none" />

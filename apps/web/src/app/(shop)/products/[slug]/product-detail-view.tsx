@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Check,
   ChevronRight,
@@ -17,26 +18,26 @@ import { toast } from 'sonner';
 
 import { formatPrice } from '@bazaar/ui';
 
-import { ProductCard } from '@/components/shop/product-card';
+import { AnimatedPrice } from '@/components/animations/animated-price';
 import { ProductGallery } from '@/components/shop/product-gallery';
+import { ProductRecommendations } from '@/components/shop/product-recommendations';
+import { ReviewList } from '@/components/shop/review-list';
+import { ReviewSummaryCard } from '@/components/shop/review-summary-card';
 import { StarRating } from '@/components/shop/star-rating';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from '@/components/ui/carousel';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ApiError } from '@/lib/api';
 import {
   deriveOptions,
   discountPercent,
   matchVariant,
   type ProductDetail,
 } from '@/lib/catalog';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { useCartStore } from '@/lib/store/cart-store';
+import { selectIsSaved, useWishlistStore } from '@/lib/store/wishlist-store';
 import { cn } from '@/lib/utils';
 
 export function ProductDetailView({ product }: { product: ProductDetail }) {
@@ -91,15 +92,19 @@ export function ProductDetailView({ product }: { product: ProductDetail }) {
           </div>
 
           <div className="flex flex-wrap items-baseline gap-3">
-            <span className="numeric text-3xl font-semibold">
-              {formatPrice(price, product.currency)}
-            </span>
+            {/* Picking a pricier variant scrolls the old figure up and the new
+                one in from below, so the change is seen rather than found. */}
+            <AnimatedPrice
+              value={price}
+              currency={product.currency}
+              className="text-3xl font-semibold"
+            />
             {product.compareAtPrice ? (
               <span className="numeric text-base text-muted-foreground line-through">
                 {formatPrice(product.compareAtPrice, product.currency)}
               </span>
             ) : null}
-            {discount ? <Badge className="bg-sale text-white">Save {discount}%</Badge> : null}
+            {discount ? <Badge className="bg-sale text-black">Save {discount}%</Badge> : null}
           </div>
 
           {product.shortDescription ? (
@@ -135,14 +140,20 @@ export function ProductDetailView({ product }: { product: ProductDetail }) {
               disabled={available === 0}
             />
             <AddToCartButton
+              productId={product.id}
               productName={product.name}
+              variantId={variant?.id}
               quantity={quantity}
               disabled={available === 0}
             />
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <WishlistButton productName={product.name} />
+            <WishlistButton
+              productId={product.id}
+              productName={product.name}
+              variantId={variant?.id ?? null}
+            />
             <ShareButton productName={product.name} />
           </div>
 
@@ -161,27 +172,11 @@ export function ProductDetailView({ product }: { product: ProductDetail }) {
 
       <ProductTabs product={product} />
 
-      {product.related.length > 0 ? (
-        <section className="mt-14">
-          <h2 className="font-display mb-4 text-xl font-bold tracking-tight">
-            More in {product.category.name}
-          </h2>
-          <Carousel opts={{ align: 'start', slidesToScroll: 1 }}>
-            <CarouselContent className="-ml-4">
-              {product.related.map((item) => (
-                <CarouselItem
-                  key={item.id}
-                  className="basis-[70%] pl-4 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4"
-                >
-                  <ProductCard product={item} />
-                </CarouselItem>
-              ))}
-            </CarouselContent>
-            <CarouselPrevious className="hidden sm:flex" />
-            <CarouselNext className="hidden sm:flex" />
-          </Carousel>
-        </section>
-      ) : null}
+      <ProductRecommendations
+        productId={product.id}
+        categoryName={product.category.name}
+        fallback={product.related}
+      />
     </div>
   );
 }
@@ -325,13 +320,13 @@ function StockLine({ available, hasVariants }: { available: number; hasVariants:
 
   if (available <= 5) {
     return (
-      <p className="text-sm font-medium text-warning">
+      <p className="text-sm font-medium text-caution">
         Only {available} left — order soon
       </p>
     );
   }
 
-  return <p className="text-sm font-medium text-success">In stock</p>;
+  return <p className="text-sm font-medium text-ok">In stock</p>;
 }
 
 function QuantityStepper({
@@ -374,15 +369,25 @@ function QuantityStepper({
   );
 }
 
+/**
+ * Adds the selected variant and opens the drawer. The 800ms checkmark morph
+ * (H2) is kept, but it now fires on the server's answer rather than a timer -
+ * "Added" must not appear for something that failed to add.
+ */
 function AddToCartButton({
+  productId,
   productName,
+  variantId,
   quantity,
   disabled,
 }: {
+  productId: string;
   productName: string;
+  variantId: string | undefined;
   quantity: number;
   disabled: boolean;
 }) {
+  const addItem = useCartStore((state) => state.addItem);
   const [state, setState] = React.useState<'idle' | 'adding' | 'added'>('idle');
 
   React.useEffect(() => {
@@ -391,20 +396,32 @@ function AddToCartButton({
     return () => clearTimeout(timer);
   }, [state]);
 
+  const handleAdd = async () => {
+    if (!variantId) {
+      toast.error('Choose an option first.');
+      return;
+    }
+
+    setState('adding');
+
+    try {
+      await addItem({ productId, variantId, quantity });
+      setState('added');
+      toast.success(`${quantity} × ${productName} added to cart.`);
+    } catch (error) {
+      setState('idle');
+      toast.error(
+        error instanceof ApiError ? error.message : 'Could not add that to your cart.',
+      );
+    }
+  };
+
   return (
     <Button
       size="lg"
       className={cn('h-10 flex-1 sm:flex-none', state === 'added' && 'bg-success hover:bg-success')}
       disabled={disabled || state !== 'idle'}
-      onClick={() => {
-        setState('adding');
-        setTimeout(() => {
-          setState('added');
-          toast.success(`${quantity} × ${productName} added to cart.`, {
-            description: 'The cart drawer arrives in Phase 4.',
-          });
-        }, 220);
-      }}
+      onClick={() => void handleAdd()}
     >
       {state === 'idle' ? <ShoppingCart className="size-4" /> : null}
       {state === 'adding' ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -414,21 +431,59 @@ function AddToCartButton({
   );
 }
 
-function WishlistButton({ productName }: { productName: string }) {
-  const [saved, setSaved] = React.useState(false);
+function WishlistButton({
+  productId,
+  productName,
+  variantId,
+}: {
+  productId: string;
+  productName: string;
+  variantId: string | null;
+}) {
+  const router = useRouter();
+  const user = useAuthStore((state) => state.user);
+  const authReady = useAuthStore((state) => state.ready);
+  const toggle = useWishlistStore((state) => state.toggleByProduct);
+  // Matched on the product alone: the heart reflects "this is saved", and
+  // re-saving the same product under a second variant is not what the button
+  // on a detail page is for.
+  const saved = useWishlistStore(selectIsSaved(productId));
+  const [pending, setPending] = React.useState(false);
+
+  const handleClick = async () => {
+    if (authReady && !user) {
+      toast.info('Log in to save items to your wishlist.', {
+        action: { label: 'Log in', onClick: () => router.push('/login?next=/wishlist') },
+      });
+      return;
+    }
+
+    setPending(true);
+
+    try {
+      const isSaved = await toggle(productId, saved ? undefined : variantId);
+      toast.success(isSaved ? 'Saved to your wishlist.' : 'Removed from your wishlist.');
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Could not update your wishlist.');
+    } finally {
+      setPending(false);
+    }
+  };
 
   return (
     <Button
       variant="outline"
-      onClick={() => {
-        setSaved((value) => !value);
-        toast.success(saved ? 'Removed from wishlist.' : 'Saved to your wishlist.');
-      }}
+      onClick={() => void handleClick()}
+      disabled={pending}
       aria-pressed={saved}
     >
-      <Heart
-        className={cn('size-4', saved && 'bz-heart-pop fill-destructive text-destructive')}
-      />
+      {pending ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : (
+        <Heart
+          className={cn('size-4', saved && 'bz-heart-pop fill-destructive text-destructive')}
+        />
+      )}
       {saved ? 'Saved' : 'Save'}
       <span className="sr-only"> {productName}</span>
     </Button>
@@ -525,7 +580,7 @@ function ProductTabs({ product }: { product: ProductDetail }) {
       </TabsContent>
 
       <TabsContent value="reviews" className="pt-5">
-        <div className="max-w-lg space-y-4">
+        <div className="max-w-2xl space-y-6">
           <div className="flex items-center gap-4">
             <span className="numeric text-4xl font-semibold">
               {product.reviewSummary.rating.toFixed(1)}
@@ -561,9 +616,11 @@ function ProductTabs({ product }: { product: ProductDetail }) {
             })}
           </ul>
 
-          <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-            Writing reviews opens in Phase 7 — only verified purchasers will be able to post.
-          </p>
+          {/* The AI consensus sits above the individual reviews, never instead
+              of them - a shopper has to be able to check it against the source. */}
+          <ReviewSummaryCard productId={product.id} />
+
+          <ReviewList productId={product.id} />
         </div>
       </TabsContent>
 

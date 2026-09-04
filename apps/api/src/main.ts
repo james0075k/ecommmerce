@@ -9,7 +9,10 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // `rawBody` keeps the untouched request bytes on `request.rawBody`. Stripe's
+  // webhook signature is computed over exactly those bytes, so a body that has
+  // been parsed and re-serialised can never be verified.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
   const config = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 

@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import type { Category } from '@prisma/client';
 import type { CategoryInput, CategoryUpdateInput } from '@bazaar/shared';
 
+import { CacheService } from '../common/redis/cache.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface CategoryNode extends Category {
@@ -11,7 +12,10 @@ export interface CategoryNode extends Category {
 
 @Injectable()
 export class CategoriesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   /**
    * The whole tree in one query, assembled in memory.
@@ -21,6 +25,15 @@ export class CategoriesService {
    * and avoids raw SQL, which the blueprint rules out.
    */
   async getTree(includeInactive = false): Promise<CategoryNode[]> {
+    // Cached for an hour (Phase 11). The tree is on every page - the mega menu,
+    // the mobile drawer, the filter rail - and changes only when an admin edits
+    // it, at which point `invalidate` below drops the whole namespace.
+    return this.cache.getOrSet('categories', `tree:${includeInactive ? 'all' : 'active'}`, () =>
+      this.readTree(includeInactive),
+    );
+  }
+
+  private async readTree(includeInactive: boolean): Promise<CategoryNode[]> {
     const categories = await this.prisma.category.findMany({
       where: includeInactive ? {} : { isActive: true },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -96,7 +109,9 @@ export class CategoriesService {
       await this.assertExists(dto.parentId);
     }
 
-    return this.prisma.category.create({ data: dto });
+    const created = await this.prisma.category.create({ data: dto });
+    await this.cache.invalidate('categories');
+    return created;
   }
 
   async update(id: string, dto: CategoryUpdateInput): Promise<Category> {
@@ -119,7 +134,12 @@ export class CategoriesService {
       await this.assertExists(dto.parentId);
     }
 
-    return this.prisma.category.update({ where: { id }, data: dto });
+    const updated = await this.prisma.category.update({ where: { id }, data: dto });
+    // A rename, a reparent or a deactivation all change the shape of the tree,
+    // and a stale menu that links to a category that is no longer there is a
+    // 404 the shopper did nothing to earn.
+    await this.cache.invalidate('categories');
+    return updated;
   }
 
   async remove(id: string): Promise<{ message: string }> {
@@ -143,6 +163,7 @@ export class CategoriesService {
     }
 
     await this.prisma.category.delete({ where: { id } });
+    await this.cache.invalidate('categories');
     return { message: 'Category deleted.' };
   }
 

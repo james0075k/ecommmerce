@@ -2,11 +2,25 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import type { Prisma, ProductVariant } from '@prisma/client';
 import type { StockAdjustmentInput, VariantInput, VariantUpdateInput } from '@bazaar/shared';
 
+import { CacheService } from '../common/redis/cache.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class VariantsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
+
+  /**
+   * Variants carry the price and the stock the listing grid renders, so every
+   * write here invalidates the cached listings even though no product row was
+   * touched. A cached page advertising a variant that sold out four minutes ago
+   * is the one staleness a shopper actually notices.
+   */
+  private async invalidateListings(): Promise<void> {
+    await this.cache.invalidate('products');
+  }
 
   async list(productId: string): Promise<ProductVariant[]> {
     return this.prisma.productVariant.findMany({
@@ -19,13 +33,16 @@ export class VariantsService {
     await this.assertProductExists(productId);
     await this.assertSkuFree(dto.sku);
 
-    return this.prisma.productVariant.create({
+    const created = await this.prisma.productVariant.create({
       data: {
         ...dto,
         productId,
         attributes: dto.attributes as Prisma.InputJsonValue,
       },
     });
+
+    await this.invalidateListings();
+    return created;
   }
 
   async update(variantId: string, dto: VariantUpdateInput): Promise<ProductVariant> {
@@ -35,7 +52,7 @@ export class VariantsService {
       await this.assertSkuFree(dto.sku);
     }
 
-    return this.prisma.productVariant.update({
+    const updated = await this.prisma.productVariant.update({
       where: { id: variantId },
       data: {
         ...dto,
@@ -44,6 +61,9 @@ export class VariantsService {
         }),
       },
     });
+
+    await this.invalidateListings();
+    return updated;
   }
 
   /**
@@ -60,12 +80,14 @@ export class VariantsService {
         where: { id: variantId },
         data: { isActive: false },
       });
+      await this.invalidateListings();
       return {
         message: `This variant appears in ${orderCount} orders, so it was deactivated rather than deleted.`,
       };
     }
 
     await this.prisma.productVariant.delete({ where: { id: variantId } });
+    await this.invalidateListings();
     return { message: 'Variant deleted.' };
   }
 
@@ -75,7 +97,7 @@ export class VariantsService {
    * starting value (D2: no overselling).
    */
   async adjustStock(variantId: string, dto: StockAdjustmentInput): Promise<ProductVariant> {
-    return this.prisma.$transaction(async (tx) => {
+    const variant = await this.prisma.$transaction(async (tx) => {
       const variant = await tx.productVariant.findUnique({ where: { id: variantId } });
       if (!variant) throw new NotFoundException('Variant not found.');
 
@@ -91,6 +113,11 @@ export class VariantsService {
         data: { stockQuantity: next },
       });
     });
+
+    // "Only 3 left" and "Out of stock" are both rendered from the cached
+    // listing row, so a restock has to show up before the TTL would.
+    await this.invalidateListings();
+    return variant;
   }
 
   /**
@@ -155,6 +182,8 @@ export class VariantsService {
         }),
       );
     }
+
+    if (created.length > 0) await this.invalidateListings();
 
     return { created: created.length, skipped, variants: created };
   }

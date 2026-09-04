@@ -2,6 +2,8 @@ import { Logger, Module, type Provider } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
 
+import { CartModule } from '../cart/cart.module';
+
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { TokenService } from './token.service';
@@ -33,7 +35,10 @@ const googleStrategyProvider: Provider = {
 };
 
 @Module({
-  imports: [ConfigModule, PassportModule.register({ session: false })],
+  // CartModule is imported so a guest cart can be merged into the account at
+  // the moment of login. The dependency only runs one way - the cart knows
+  // nothing about auth.
+  imports: [ConfigModule, PassportModule.register({ session: false }), CartModule],
   controllers: [AuthController],
   providers: [AuthService, TokenService, JwtStrategy, googleStrategyProvider],
   exports: [AuthService, TokenService],

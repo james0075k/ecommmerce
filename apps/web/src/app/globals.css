@@ -19,6 +19,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-solid: var(--primary-solid);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -52,6 +53,15 @@
   --color-sale: var(--bz-secondary);
   --color-success: var(--bz-success);
   --color-warning: var(--bz-warning);
+
+  /* The same four meanings, as text. `bg-success` + black is a fill; `text-ok`
+     is a word on the page, and the raw brand hues do not clear 4.5:1 on a light
+     background. Rule of thumb: `bg-*` uses the token above, `text-*` uses the
+     one here (Phase 11, WCAG AA). */
+  --color-ok: var(--bz-success-text);
+  --color-caution: var(--bz-warning-text);
+  --color-danger: var(--bz-error-text);
+  --color-deal: var(--bz-sale-text);
 
   /* --- Type (Part H1) ---------------------------------------------------- */
   --font-display: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
@@ -122,6 +132,80 @@
   .container-bazaar {
     @apply mx-auto w-full px-4 md:px-6 lg:px-8;
     max-width: var(--bz-container-max);
+  }
+
+  /* Below-the-fold sections opt out of layout and paint until they are near the
+     viewport. On a throttled phone the homepage spends seconds in Style &
+     Layout laying out marquees, a product grid and a footer that nobody has
+     scrolled to yet.
+
+     `contain-intrinsic-size: auto <h>` is the part that keeps this honest: the
+     placeholder height is a guess only until the section has been rendered
+     once, after which the real height is remembered - so scrolling back up does
+     not shift anything. */
+  .bz-defer-paint {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 40rem;
+  }
+}
+
+/* ==========================================================================
+   Touch targets (Phase 11)
+   --------------------------------------------------------------------------
+   The design system's buttons are sized for a mouse: `default` is 32px tall,
+   `sm` is 28px and the icon buttons are 32px squares. That density is right on
+   a desktop and wrong on a phone, where the WCAG 2.5.5 / iOS HIG floor is 44px
+   and anything under it is a mis-tap waiting to happen.
+
+   Fixing it here rather than at ~200 call sites means no component has to
+   remember, and nothing changes for a mouse. `pointer: coarse` is the test
+   rather than a width breakpoint: it asks about the input device, which is the
+   thing that actually decides how big a target needs to be - a 1024px tablet
+   needs 44px and a 700px browser window on a laptop does not.
+
+   The min is applied without touching the declared height, so a button still
+   lays out at its nominal size and simply cannot end up smaller than the
+   minimum. Inline links inside prose are excluded: making every link in a
+   sentence 44px tall would wreck the line box, and WCAG exempts them.
+   ========================================================================== */
+@media (pointer: coarse) {
+  [data-slot='button'],
+  [data-slot='dropdown-menu-item'],
+  [data-slot='select-item'],
+  [data-slot='select-trigger'],
+  [data-slot='tabs-trigger'],
+  [data-slot='sheet-close'],
+  [data-slot='dialog-close'] {
+    min-height: 44px;
+  }
+
+  /* Square controls need the width too, or a 44px-tall icon button is still a
+     32px-wide target. */
+  [data-slot='button'][data-size^='icon'] {
+    min-width: 44px;
+  }
+
+  /* A checkbox is 16px and a switch is 32px wide by design, and growing either
+     one to 44px would be a different control. They get an invisible hit area
+     instead: the box keeps its size, the tappable region around it does not.
+     `position: relative` is already on both from their focus rings. */
+  [data-slot='checkbox'],
+  [data-slot='switch'] {
+    position: relative;
+  }
+
+  [data-slot='checkbox']::after,
+  [data-slot='switch']::after {
+    content: '';
+    position: absolute;
+    /* Centres a 44px square on the control whatever its own size is. */
+    top: 50%;
+    left: 50%;
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
+    transform: translate(-50%, -50%);
   }
 }
 

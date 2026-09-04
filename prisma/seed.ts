@@ -12,6 +12,8 @@
  */
 import { PrismaClient, ProductStatus } from '@prisma/client';
 
+import { DEMO_ADMIN_PASSWORD, seedCommerce } from './seed-commerce';
+
 const prisma = new PrismaClient();
 
 /* -------------------------------------------------------------------------- */
@@ -426,6 +428,11 @@ async function main(): Promise<void> {
   await seedCategories();
   const products = await seedProducts();
 
+  // Phase 8: staff, customers, orders, traffic and coupons, so the admin panel
+  // has something real to measure. Skipped by SEED_MINIMAL for the same reason
+  // the catalog is - a production seed wants configuration, not fixtures.
+  const commerce = await seedCommerce(prisma);
+
   const [categoryCount, variantCount, imageCount] = await Promise.all([
     prisma.category.count(),
     prisma.productVariant.count(),
@@ -435,6 +442,11 @@ async function main(): Promise<void> {
   console.warn(
     `\nDone. ${categoryCount} categories, ${products} products, ${variantCount} variants, ${imageCount} images.`,
   );
+  console.warn(
+    `      ${commerce.customers} customers, ${commerce.orders} orders, ${commerce.pageViews} page views, ${commerce.coupons} coupons.`,
+  );
+  console.warn(`      ${commerce.reviews} reviews.`);
+  console.warn(`      Sign in at /admin as admin@bazaar.com.np / ${DEMO_ADMIN_PASSWORD}`);
   console.warn('Run "curl -X POST localhost:4000/api/v1/admin/products/reindex" to index them.');
 }
 

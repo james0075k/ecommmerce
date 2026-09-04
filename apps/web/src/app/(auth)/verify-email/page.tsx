@@ -75,7 +75,7 @@ function VerifyEmail() {
         description="Your account is ready. Log in to get started."
       >
         <div className="flex flex-col items-center gap-4 py-2 text-center">
-          <CheckCircle2 className="size-10 text-success" aria-hidden />
+          <CheckCircle2 className="size-10 text-ok" aria-hidden />
           <Button asChild className="h-11 w-full">
             <Link href="/login">Log in</Link>
           </Button>
@@ -124,7 +124,7 @@ function VerifyEmail() {
     >
       <div className="space-y-4">
         <div className="flex items-start gap-3 rounded-md border border-border bg-muted/40 p-4">
-          <MailCheck className="mt-0.5 size-5 shrink-0 text-success" aria-hidden />
+          <MailCheck className="mt-0.5 size-5 shrink-0 text-ok" aria-hidden />
           <p className="text-sm text-muted-foreground">
             The link works for 24 hours. Check your spam folder if it has not arrived.
           </p>

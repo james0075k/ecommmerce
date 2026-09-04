@@ -34,6 +34,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
+          // Read by the progress bar in animations.css. It has to match the
+          // Toaster's own `duration` or the bar would empty at the wrong time.
+          "--bz-toast-duration": "4s",
         } as React.CSSProperties
       }
       toastOptions={{

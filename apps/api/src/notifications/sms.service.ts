@@ -34,6 +34,44 @@ export class SmsService {
     await this.send(phone, `Your Bazaar order ${orderNumber} is confirmed. Thank you!`);
   }
 
+
+  /**
+   * Shipping SMS (F1.3).
+   *
+   * SMS is 160 characters before it splits into two billed messages, so this
+   * carries only what cannot be looked up: the consignment number. The link is
+   * omitted deliberately - shipping-notification SMS with links is exactly the
+   * shape of a phishing text, and we would rather not teach shoppers to tap one.
+   */
+  async sendOrderShipped(
+    phone: string,
+    orderNumber: string,
+    trackingNumber: string,
+    carrierLabel: string | null,
+  ): Promise<void> {
+    const via = carrierLabel ? ` via ${carrierLabel}` : '';
+    await this.send(
+      phone,
+      `Bazaar order ${orderNumber} has shipped${via}. Tracking: ${trackingNumber}. Track it in your account under Orders.`,
+    );
+  }
+
+  async sendOrderDelivered(phone: string, orderNumber: string): Promise<void> {
+    await this.send(phone, `Bazaar order ${orderNumber} has been delivered. Enjoy!`);
+  }
+
+  async sendRefundIssued(
+    phone: string,
+    orderNumber: string,
+    amount: number,
+    currency: string,
+  ): Promise<void> {
+    await this.send(
+      phone,
+      `Bazaar has refunded ${currency} ${amount.toFixed(2)} for order ${orderNumber}. It reaches your account in 5-7 working days.`,
+    );
+  }
+
   private async send(to: string, text: string): Promise<void> {
     if (!this.token) {
       this.logger.log(`[sms:not-sent] to=${to} :: ${text}`);

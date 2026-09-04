@@ -16,8 +16,28 @@ import { jwtVerify } from 'jose';
 
 const REFRESH_COOKIE = 'bz_refresh';
 
-/** Signed in required. */
-const PROTECTED_PREFIXES = ['/account', '/orders', '/wishlist'];
+/**
+ * Signed in required.
+ *
+ * `/orders` is deliberately NOT here. Guest checkout (G1) means an order can
+ * exist with no account behind it, reachable only by its uuid - which is what
+ * the confirmation email links to. Gating the route would lock guests out of
+ * the order they just paid for. Authorisation lives in the API instead, where
+ * `findOne` refuses to hand a *user's* order to anyone else.
+ */
+const PROTECTED_PREFIXES = ['/account', '/wishlist'];
+/**
+ * Protected as *exact* paths, not prefixes. `/orders` is the shopper's history
+ * and needs an account; `/orders/<uuid>` is a single order and must not, for
+ * exactly the reason above.
+ */
+const PROTECTED_EXACT = ['/orders'];
+/**
+ * Carve-outs that sit *under* a protected prefix but must stay public. A
+ * wishlist share link is opened by someone who has no account here, so
+ * redirecting them to /login would defeat the entire feature.
+ */
+const PUBLIC_EXCEPTIONS = ['/wishlist/shared'];
 /** Signed in AND an admin role required. */
 const ADMIN_PREFIXES = ['/admin'];
 /** Pointless to visit while already signed in. */
@@ -57,9 +77,12 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const session = await readSession(request);
 
+  const isException = PUBLIC_EXCEPTIONS.some((prefix) => pathname.startsWith(prefix));
   const needsAdmin = ADMIN_PREFIXES.some((prefix) => pathname.startsWith(prefix));
   const needsAuth =
-    needsAdmin || PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+    needsAdmin ||
+    PROTECTED_EXACT.includes(pathname) ||
+    (!isException && PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix)));
 
   if (needsAuth && !session) {
     const login = new URL('/login', request.url);
@@ -86,7 +109,7 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     '/account/:path*',
-    '/orders/:path*',
+    '/orders',
     '/wishlist/:path*',
     '/admin/:path*',
     '/login',

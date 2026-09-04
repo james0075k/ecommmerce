@@ -61,6 +61,18 @@ export class UploadService {
     return this.createUpload(`products/${productId}`, contentType);
   }
 
+  /**
+   * An upload not yet tied to a product.
+   *
+   * Used by the create-product form, where the images are chosen before the
+   * record exists. The prefix is shared rather than per-product, which is the
+   * one cost of this: an abandoned draft leaves an orphan object, so this
+   * prefix is the one worth pointing a lifecycle rule at.
+   */
+  async createDraftImageUpload(contentType: string): Promise<PresignedUpload> {
+    return this.createUpload('products/drafts', contentType);
+  }
+
   private async createUpload(prefix: string, contentType: string): Promise<PresignedUpload> {
     if (!this.client || !this.bucket) {
       throw new ServiceUnavailableException(

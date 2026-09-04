@@ -9,6 +9,7 @@ import type {
   ProductQueryInput,
 } from '@bazaar/shared';
 
+import { CacheService } from '../common/redis/cache.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CategoriesService } from '../categories/categories.service';
 import { SearchService } from '../search/search.service';
@@ -66,6 +67,7 @@ export class ProductsService {
     private readonly prisma: PrismaService,
     private readonly categories: CategoriesService,
     private readonly search: SearchService,
+    private readonly cache: CacheService,
   ) {}
 
   /* ---------------------------------------------------------------------- */
@@ -73,6 +75,21 @@ export class ProductsService {
   /* ---------------------------------------------------------------------- */
 
   async list(
+    query: ProductQueryInput,
+  ): Promise<Paginated<ProductListItem> & { facets: CatalogFacets }> {
+    // Five minutes in Redis (Phase 11). This is the busiest read in the app and
+    // it runs four queries - page, count, rating aggregate, facets - for an
+    // answer that is byte-identical for every visitor asking the same question.
+    //
+    // The key is the query object with its keys sorted, so `?page=1&sort=new`
+    // and `?sort=new&page=1` are one entry rather than two. Any catalog write
+    // bumps the namespace generation and the whole set goes with it.
+    return this.cache.getOrSet('products', `list:${stableKey(query)}`, () =>
+      this.readList(query),
+    );
+  }
+
+  private async readList(
     query: ProductQueryInput,
   ): Promise<Paginated<ProductListItem> & { facets: CatalogFacets }> {
     const where = await this.buildWhere(query);
@@ -111,9 +128,19 @@ export class ProductsService {
   /*  Detail                                                                */
   /* ---------------------------------------------------------------------- */
 
+  /**
+   * The storefront's product page.
+   *
+   * `isActive` is part of the lookup, not just of the listing query. A draft is
+   * unpublished work - a price still being decided, a description half written -
+   * and its slug is guessable from the product name, so filtering it out of the
+   * grid while still serving it by URL publishes it to anyone who tries. A
+   * shopper gets the same 404 they would for a slug that never existed; the
+   * admin panel reads through `AdminProductsService`, which sees everything.
+   */
   async findBySlug(slug: string) {
     const product = await this.prisma.product.findFirst({
-      where: { slug, deletedAt: null },
+      where: { slug, deletedAt: null, isActive: true },
       include: {
         category: { select: { id: true, name: true, slug: true, parentId: true } },
         images: { orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }] },
@@ -293,6 +320,7 @@ export class ProductsService {
     });
 
     await this.search.removeProduct(id);
+    await this.invalidateCatalog();
     return { message: 'Product archived.' };
   }
 
@@ -313,6 +341,25 @@ export class ProductsService {
   async syncToSearch(productId: string): Promise<void> {
     const document = await this.buildDocument(productId);
     if (document) await this.search.upsertProducts([document]);
+    // Every caller of this is a write that changed what the storefront shows,
+    // so the two live in the same place rather than each writer remembering to
+    // do both.
+    await this.invalidateCatalog();
+  }
+
+  /**
+   * Drops the cached listings, and the category tree with them.
+   *
+   * The tree carries a product count per category, so publishing, archiving or
+   * recategorising a product changes it even though no category row was
+   * touched. Missing that would leave "Electronics (42)" in the menu next to a
+   * page showing 41 products.
+   */
+  async invalidateCatalog(): Promise<void> {
+    await Promise.all([
+      this.cache.invalidate('products'),
+      this.cache.invalidate('categories'),
+    ]);
   }
 
   async reindexAll(): Promise<{ indexed: number; engine: string }> {
@@ -493,6 +540,31 @@ export class ProductsService {
     };
   }
 
+  /**
+   * Hydrates a ranked list of ids into cards, keeping the caller's order.
+   *
+   * The recommender decides *which* products and in what order; it has no
+   * business knowing how a card is assembled, and duplicating LIST_SELECT there
+   * would mean a new card field silently missing from every recommendation
+   * rail. Ids that no longer resolve - archived, soft-deleted, deactivated
+   * since the ranking was computed - are dropped rather than rendered as holes.
+   */
+  async listByIds(ids: string[]): Promise<ProductListItem[]> {
+    if (ids.length === 0) return [];
+
+    const rows = await this.prisma.product.findMany({
+      where: { id: { in: ids }, isActive: true, deletedAt: null },
+      select: LIST_SELECT,
+    });
+
+    const ratings = await this.aggregateRatingsFor({ id: { in: rows.map((row) => row.id) } });
+    const byId = new Map(rows.map((row) => [row.id, toListItem(row, ratings)]));
+
+    return ids
+      .map((id) => byId.get(id))
+      .filter((item): item is ProductListItem => item !== undefined);
+  }
+
   async assertExists(id: string): Promise<Product> {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Product not found.');
@@ -579,4 +651,20 @@ function buildMeta(page: number, limit: number, total: number) {
 /** Rich-text descriptions are indexed as plain text. */
 function stripHtml(value: string): string {
   return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 8000);
+}
+
+/**
+ * A deterministic cache key for a query object.
+ *
+ * `JSON.stringify` follows insertion order, which for a parsed query string is
+ * the order the shopper's browser happened to send the parameters in - so the
+ * same filters could produce several keys and each would miss. Sorting the
+ * entries first collapses them onto one.
+ */
+function stableKey(query: ProductQueryInput): string {
+  const entries = Object.entries(query as Record<string, unknown>)
+    .filter(([, value]) => value !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  return JSON.stringify(entries);
 }

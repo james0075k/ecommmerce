@@ -1,24 +1,38 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule, type JwtModuleOptions } from '@nestjs/jwt';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { RATE_LIMIT_DEFAULT } from '@bazaar/shared';
 
+import { AdminModule } from './admin/admin.module';
+import { AdminAuditInterceptor } from './admin/admin-audit.interceptor';
+import { AiModule } from './ai/ai.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
+import { CartModule } from './cart/cart.module';
 import { CategoriesModule } from './categories/categories.module';
+import { CouponsModule } from './coupons/coupons.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
+import { RequestContextInterceptor } from './common/interceptors/request-context.interceptor';
 import { RedisModule } from './common/redis/redis.module';
+import { RequestContextModule } from './common/request-context.module';
 import { validateEnv } from './config/env';
 import { HealthModule } from './health/health.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { OrdersModule } from './orders/orders.module';
+import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
+import { QueueModule } from './queue/queue.module';
+import { ReviewsModule } from './reviews/reviews.module';
 import { SearchModule } from './search/search.module';
+import { ShippingModule } from './shipping/shipping.module';
 import { UploadModule } from './upload/upload.module';
 import { UsersModule } from './users/users.module';
+import { WishlistModule } from './wishlist/wishlist.module';
 
 @Module({
   imports: [
@@ -54,8 +68,10 @@ import { UsersModule } from './users/users.module';
 
     ScheduleModule.forRoot(),
 
+    RequestContextModule,
     PrismaModule,
     RedisModule,
+    QueueModule,
     NotificationsModule,
     AuthModule,
     UsersModule,
@@ -63,9 +79,27 @@ import { UsersModule } from './users/users.module';
     CategoriesModule,
     ProductsModule,
     SearchModule,
+    ReviewsModule,
+    CouponsModule,
+    CartModule,
+    WishlistModule,
+    ShippingModule,
+    PaymentsModule,
+    OrdersModule,
+    AdminModule,
+    AnalyticsModule,
+    AiModule,
     HealthModule,
   ],
   providers: [
+    // Interceptors run in declaration order on the way in. The context has to
+    // be open before the audit interceptor logs anything through it, so it is
+    // registered first - and both sit outside any feature module, so a new
+    // admin route is covered the day it is written rather than the day someone
+    // remembers to decorate it (Phase 8).
+    { provide: APP_INTERCEPTOR, useClass: RequestContextInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: AdminAuditInterceptor },
+
     // Order matters: throttle first, then authenticate, then check roles.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     // Authentication is opt-out. A route without @Public() requires a token, so

@@ -190,7 +190,7 @@ const Field = React.forwardRef<
           {...props}
         />
         {valid ? (
-          <Check className="absolute top-1/2 right-3 size-4 -translate-y-1/2 text-success" aria-hidden />
+          <Check className="absolute top-1/2 right-3 size-4 -translate-y-1/2 text-ok" aria-hidden />
         ) : null}
       </div>
       {error ? (

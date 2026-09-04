@@ -35,6 +35,7 @@ export const addToCartSchema = z.object({
 
 export type AddToCartInput = z.infer<typeof addToCartSchema>;
 
+/** Quantity 0 is accepted and removes the line, which is what a stepper at 1 does. */
 export const updateCartItemSchema = z.object({
   quantity: z.number().int().min(0).max(99),
 });
@@ -63,6 +64,19 @@ export const addToWishlistSchema = z.object({
 });
 
 export type AddToWishlistInput = z.infer<typeof addToWishlistSchema>;
+
+/**
+ * Moving to the cart needs a concrete variant. The wishlist may hold one
+ * already; when it does not (the shopper saved from a grid tile), the client
+ * picks one and sends it here, and the API falls back to the first in-stock
+ * variant if neither side chose.
+ */
+export const moveToCartSchema = z.object({
+  variantId: uuidSchema.optional().nullable(),
+  quantity: z.number().int().positive().max(99).default(1),
+});
+
+export type MoveToCartInput = z.infer<typeof moveToCartSchema>;
 
 /* -------------------------------------------------------------------------- */
 /*  Reviews (C1.4) - verified purchasers only (D2)                            */
